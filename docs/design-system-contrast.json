@@ -1,0 +1,163 @@
+{
+  "checks": [
+    {
+      "foreground": "on-primary",
+      "background": "primary",
+      "ratio": 6.523,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "on-primary",
+      "background": "primary-hover",
+      "ratio": 9.013,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "on-primary",
+      "background": "primary-active",
+      "ratio": 12.238,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "selected-fg",
+      "background": "selected-bg",
+      "ratio": 4.988,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "text-secondary",
+      "background": "canvas",
+      "ratio": 7.136,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "text-on-canvas",
+      "background": "canvas",
+      "ratio": 7.136,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "text-muted",
+      "background": "surface",
+      "ratio": 4.759,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "border-on-canvas",
+      "background": "canvas",
+      "ratio": 4.481,
+      "target": 3,
+      "pass": true
+    },
+    {
+      "foreground": "border-control",
+      "background": "surface",
+      "ratio": 3.181,
+      "target": 3,
+      "pass": true
+    },
+    {
+      "foreground": "on-accent",
+      "background": "accent",
+      "ratio": 5.097,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "on-danger",
+      "background": "danger",
+      "ratio": 6.47,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "focus",
+      "background": "surface",
+      "ratio": 6.523,
+      "target": 3,
+      "pass": true
+    },
+    {
+      "foreground": "link",
+      "background": "canvas",
+      "ratio": 6.142,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "success-text",
+      "background": "success-bg",
+      "ratio": 6.812,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "error-text",
+      "background": "error-bg",
+      "ratio": 5.915,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "warning-text",
+      "background": "warning-bg",
+      "ratio": 6.837,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "info-text",
+      "background": "info-bg",
+      "ratio": 8.015,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "neutral-text",
+      "background": "neutral-bg",
+      "ratio": 6.917,
+      "target": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "chart-views",
+      "background": "surface",
+      "ratio": 6.523,
+      "target": 3,
+      "pass": true
+    },
+    {
+      "foreground": "chart-interactions",
+      "background": "surface",
+      "ratio": 7.105,
+      "target": 3,
+      "pass": true
+    },
+    {
+      "foreground": "chart-activity",
+      "background": "surface",
+      "ratio": 5.473,
+      "target": 3,
+      "pass": true
+    },
+    {
+      "foreground": "chart-sales",
+      "background": "surface",
+      "ratio": 5.292,
+      "target": 3,
+      "pass": true
+    }
+  ],
+  "adjustments": {
+    "muted_on_cream": "4.481:1; use text-on-canvas instead",
+    "control_border_on_cream": "2.995:1; use border-on-canvas instead"
+  },
+  "scope": "Color-pair verification only; not a complete WCAG audit."
+}

@@ -1,0 +1,104 @@
+/* Its My Live Color Design System v1.0 — primitives and semantic roles. */
+:root {
+  color-scheme: light;
+
+  /* Core palette: exact dari lampiran */
+  --brand-blue-500: #78b3ce;
+  --brand-blue-100: #c9e6f0;
+  --brand-cream: #fbf8ef;
+  --brand-orange-500: #f96e2a;
+
+  /* Derived palette */
+  --brand-blue-50: #eff7fb;
+  --brand-blue-200: #acd4e5;
+  --brand-blue-600: #3d819f;
+  --brand-blue-700: #28647f;
+  --brand-blue-800: #1d4e65;
+  --brand-blue-900: #15394a;
+  --brand-orange-50: #fff2e8;
+  --brand-orange-100: #ffe0c7;
+  --brand-orange-700: #b9470a;
+  --brand-orange-800: #943807;
+  --brand-orange-900: #762b05;
+
+  /* Surfaces and typography */
+  --color-canvas: var(--brand-cream);
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f8fafc;
+  --color-surface-hover: #f1f5f9;
+  --color-surface-selected: var(--brand-blue-50);
+  --color-text: #1f2937;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-border-subtle: #e2e8f0;
+  --color-border-control: #82939c;
+  --color-border-strong: #64748b;
+
+  /* Actions and focus */
+  --color-primary: var(--brand-blue-700);
+  --color-primary-hover: var(--brand-blue-800);
+  --color-primary-active: var(--brand-blue-900);
+  --color-on-primary: #ffffff;
+  --color-link: var(--brand-blue-700);
+  --color-link-hover: var(--brand-blue-800);
+  --color-focus: var(--brand-blue-700);
+  --color-focus-offset: #ffffff;
+  --color-selected-bg: var(--brand-blue-100);
+  --color-selected-fg: var(--brand-blue-700);
+  --color-selected-indicator: var(--brand-blue-700);
+  --color-accent: var(--brand-orange-500);
+  --color-on-accent: #1f2937;
+  --color-accent-border: var(--brand-orange-700);
+  --color-accent-hover-bg: var(--brand-orange-100);
+  --color-accent-hover-fg: var(--brand-orange-900);
+  --color-accent-active: var(--brand-orange-700);
+  --color-on-accent-active: #ffffff;
+  --color-disabled-bg: #f1f5f9;
+  --color-disabled-fg: #64748b;
+  --color-disabled-border: #e2e8f0;
+
+  /* Feedback: bg / decorative border / text / icon or control border */
+  --color-success-bg: #f0fdf4;
+  --color-success-border: #bbf7d0;
+  --color-success-text: #166534;
+  --color-success-strong: #15803d;
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-error-text: #b91c1c;
+  --color-error-strong: #b91c1c;
+  --color-danger: #b91c1c;
+  --color-danger-hover: #991b1b;
+  --color-on-danger: #ffffff;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-warning-text: #92400e;
+  --color-warning-strong: #b45309;
+  --color-info-bg: #eff6ff;
+  --color-info-border: #bfdbfe;
+  --color-info-text: #1e40af;
+  --color-info-strong: #1d4ed8;
+  --color-neutral-bg: #f1f5f9;
+  --color-neutral-border: #cbd5e1;
+  --color-neutral-text: #475569;
+  --color-neutral-strong: #475569;
+
+  /* Charts */
+  --color-chart-views: var(--brand-blue-700);
+  --color-chart-views-fill: var(--brand-blue-100);
+  --color-chart-interactions: #6d28d9;
+  --color-chart-interactions-fill: #ede9fe;
+  --color-chart-activity: #0f766e;
+  --color-chart-activity-fill: #ccfbf1;
+  --color-chart-sales: var(--brand-orange-700);
+  --color-chart-sales-fill: var(--brand-orange-100);
+  --color-chart-comparison: #64748b;
+  --color-chart-grid: #e2e8f0;
+  --color-chart-label: #475569;
+  --color-skeleton: #e2e8f0;
+  --color-overlay: rgb(15 23 42 / 40%);
+  --color-shadow: rgb(15 23 42 / 6%);
+}
+
+:root { --primary: var(--color-primary); --border: var(--color-border-subtle); --muted: var(--color-text-secondary); }
+/* Context adjustments: cream requires slightly darker text/control outlines. */
+:root { --color-text-on-canvas: var(--color-text-secondary); --color-border-on-canvas: var(--color-border-strong); }

@@ -1,0 +1,13 @@
+/* Local Diatype installs; bundled webfont files are registered by lib/fonts.ts. */
+@font-face{font-family:'Diatype';src:local('ABC Diatype Regular'),local('Diatype Regular'),local('ABCDiatype-Regular');font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:'Diatype';src:local('ABC Diatype Medium'),local('Diatype Medium'),local('ABCDiatype-Medium');font-weight:500;font-style:normal;font-display:swap}
+@font-face{font-family:'Diatype';src:local('ABC Diatype Bold'),local('Diatype Bold'),local('ABCDiatype-Bold');font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:'Diatype';src:local('ABC Diatype Regular Italic'),local('Diatype Regular Italic'),local('ABCDiatype-RegularItalic');font-weight:400;font-style:italic;font-display:swap}
+:root{--font-ui:'Diatype','ABC Diatype',-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;--font-weight-body:400;--font-weight-label:500;--font-weight-heading:700;font-family:var(--font-ui);font-weight:var(--font-weight-body);font-synthesis:none}
+body,button,input,select,textarea{font-family:var(--font-ui)}
+body,p,small,td,input,textarea,select{font-weight:var(--font-weight-body)}
+h1,h2,h3,strong,b,.wordmark,.metric>strong{font-weight:var(--font-weight-heading)}
+button,.button,nav a,label,th,.assignment-picker legend,.brand-selector select,.person-avatar,.avatar{font-weight:var(--font-weight-label)}
+h1{letter-spacing:-.025em}h2,h3{letter-spacing:-.015em}.wordmark{letter-spacing:-.045em}.metric>strong{letter-spacing:-.035em}
+.metric>strong,.data-context,.detail-context,.pagination,td,input[type=number],input[type=date],input[type=datetime-local]{font-variant-numeric:lining-nums tabular-nums}
+blockquote,cite,em{font-style:italic;font-weight:var(--font-weight-body)}.metric em{font-style:normal}

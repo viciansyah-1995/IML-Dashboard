@@ -1,0 +1,21 @@
+import React from 'react';
+import {describe,it,expect,vi} from 'vitest';
+import {render,screen,fireEvent} from '@testing-library/react';
+import {useState} from 'react';
+import {MetricCard} from '../components/ui/Primitives';
+import {CompareSelector} from '../features/leaderboard';
+import {readFilters,saveFilters,filterQuery,selectHost} from '../lib/api/filters';
+import {validateFiles} from '../features/upload';
+import {jobInterval} from '../features/admin';
+import {queryClient,invalidateReports} from '../lib/query/client';
+import {num,can,type Host,type User} from '../lib/api/client';
+describe('report integrity and interactions',()=>{
+ it('large decimal amounts retain exact digits',()=>{expect(num('12345678901234567890.12')).toBe('12.345.678.901.234.567.890,12');expect(num('349000.0000')).toBe('349.000');expect(num('0.005')).toBe('0,01')});
+ it('private and global filter namespaces stay separate',()=>{const p=new URLSearchParams('p_brand=private-a&p_from=2026-09-26&g_from=2026-10-01');const g=readFilters(p,true);expect(g.brand_id).toBe('');expect(g.date_from).toBe('2026-10-01');const next=saveFilters(p,{...g,channel:'shopee',basis:'Pesanan Dibuat'},true);expect(next.get('p_brand')).toBe('private-a');expect(next.get('p_from')).toBe('2026-09-26');expect(filterQuery(g,true)).not.toContain('brand_id')});
+ it('null renders N/A and explicit zero stays zero',()=>{render(<><MetricCard label="Empty" value={null}/><MetricCard label="Measured" value="0"/></>);expect(screen.getByText('N/A')).toBeVisible();expect(screen.getByText('0')).toBeVisible()});
+ it('compare interaction stops at three hosts',()=>{const hosts=['A','B','C','D'].map((name,i)=>({name,host_id:String(i)} as Host));function Test(){const [ids,set]=useState<string[]>([]);return <CompareSelector ids={ids} onChange={set} hosts={hosts}/>};render(<Test/>);for(const name of ['A','B','C'])fireEvent.click(screen.getByLabelText(`Bandingkan ${name}`));expect(screen.getByLabelText('Bandingkan D')).toBeDisabled();expect(selectHost(['0','1','2'],'3')).toHaveLength(3)});
+ it('terminal jobs stop polling and active jobs poll',()=>{expect(jobInterval([{status:'succeeded'}] as never)).toBe(false);expect(jobInterval([{status:'running'}] as never)).toBe(3000)});
+ it('upload invalid files produce actionable errors',()=>{expect(validateFiles([new File(['test'],'script.txt',{type:'text/plain'})])).toContain('PNG/JPEG/PDF');expect(validateFiles([])).toContain('minimal satu')});
+ it('client cannot enter admin upload but has global summary',()=>{const client={role:'client',permissions:['read_brand_report']} as User;expect(can(client,'upload_report')).toBe(false);expect(can(client,'read_global_host_summary')).toBe(true)});
+ it('publish invalidation refreshes private/global/operations data',async()=>{const spy=vi.spyOn(queryClient,'invalidateQueries').mockResolvedValue();await invalidateReports();const arg=spy.mock.calls[0][0];expect(arg?.predicate?.({queryKey:['u',1,'private']} as never)).toBe(true);expect(arg?.predicate?.({queryKey:['u',1,'global']} as never)).toBe(true);expect(arg?.predicate?.({queryKey:['auth','me']} as never)).toBe(false);spy.mockRestore()});
+});

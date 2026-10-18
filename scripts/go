@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+export GOPATH="$PWD/.local/gopath" GOCACHE="$PWD/.local/go-cache" GOMODCACHE="$PWD/.local/go-mod"
+if command -v go >/dev/null 2>&1; then exec go "$@"; fi
+exec "$PWD/.local/toolchains/go/bin/go" "$@"

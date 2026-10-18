@@ -1,0 +1,11 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import App from './App';
+import {loadProjectFonts} from '../lib/fonts';
+import '../styles/tokens.css';
+import '../styles/main.css';
+import '../styles/semantic.css';
+import '../styles/typography.css';
+import '../styles/layout.css';
+loadProjectFonts();
+createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

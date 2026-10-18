@@ -1,0 +1,223 @@
+/* Shared 4px spacing scale. Layout consumes semantic tokens so density can be
+   adjusted without changing component colors, typography, or behavior. */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --layout-sidebar: 232px;
+  --layout-content-max: 1440px;
+  --layout-page-inset: var(--space-8);
+  --layout-grid-gap: var(--space-6);
+  --layout-section-gap: var(--space-6);
+  --layout-card-inset: var(--space-6);
+  --layout-field-gap: var(--space-5);
+  --layout-control-height: 44px;
+}
+
+/* One shared content boundary for headers, filters, cards, and tables. */
+.sidebar {width:var(--layout-sidebar);padding:var(--space-8) var(--space-4) var(--space-6)}
+.sidebar nav {gap:var(--space-1)}
+.sidebar nav a {gap:var(--space-3);padding:var(--space-3)}
+.workspace {margin-left:var(--layout-sidebar);min-width:0}
+.topbar {height:80px;padding-inline:var(--layout-page-inset);gap:var(--space-4)}
+.workspace>main {width:100%;max-width:var(--layout-content-max);padding:var(--space-8) var(--layout-page-inset) var(--space-6)}
+.page-header {gap:var(--space-6);margin-bottom:var(--space-8);align-items:flex-start}
+.page-header>div:first-child {min-width:0}
+.page-header p {margin-top:var(--space-2);max-width:72ch}
+.eyebrow {margin-bottom:var(--space-2)}
+.export-actions {gap:var(--space-2);flex-wrap:wrap;flex-shrink:0}
+.card {margin-bottom:var(--layout-section-gap)}
+.section-title {margin:0 0 var(--space-4)}
+.list-controls,.tabs {gap:var(--space-4);margin-bottom:var(--layout-section-gap)}
+.list-controls>label {min-width:0;flex-basis:240px}
+.tabs {flex-wrap:wrap}
+footer {margin-top:var(--space-8);padding:var(--space-6) 0 var(--space-12)}
+
+/* 12-column page grid: KPI=3, paired panels=6, full sections=12.
+   Fractional tracks prevent long text and numeric values from widening a page. */
+.kpi-grid,.two-grid,.dashboard-widgets,.review-grid,.compare-grid {
+  gap:var(--layout-grid-gap);
+  min-width:0;
+}
+.kpi-grid {grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:var(--space-4)}
+.kpi-grid.three {grid-template-columns:repeat(3,minmax(0,1fr))}
+.kpi-grid>.metric,.business-grid>.metric {margin:0}
+.two-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+.two-grid>.card,.review-grid>.card {margin-bottom:0}
+main>.two-grid,main>.review-grid {margin-bottom:var(--layout-section-gap)}
+.dashboard-widgets {grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:var(--layout-section-gap);align-items:stretch}
+.dashboard-widget {display:flex;flex-direction:column;gap:var(--space-4);min-width:0;margin:0}
+.dashboard-widget>.card,.dashboard-widget>.kpi-grid,.dashboard-widget>.section-title {margin:0}
+.dashboard-widget>.chart {flex:1}
+.widget-sales>.two-grid {align-items:stretch}
+.widget-sales .business-grid {margin:0}
+.metric {padding:var(--layout-card-inset);min-width:0;min-height:168px}
+.metric>strong {margin:var(--space-4) 0 var(--space-2);overflow-wrap:anywhere}
+.metric>div:first-child {align-items:flex-start;gap:var(--space-2)}
+.data-context {margin:0 0 var(--layout-section-gap)}
+.chart,.explore,.profile,.config-card,.review-fields,.review-actions,.history,.evidence,.ds-section {padding:var(--layout-card-inset)}
+.chart .canvas-wrap {margin-top:var(--space-6)}
+.chart small {margin-top:var(--space-4)}
+.chart details {margin-top:var(--space-4);padding-top:var(--space-3)}
+.business-grid {padding:var(--space-4);gap:var(--space-4);align-content:start}
+.business-grid>.metric {padding:var(--space-4);min-height:140px}
+.explore,.detail-context {gap:var(--space-4)}
+.detail-context {padding:var(--space-5) var(--layout-card-inset)}
+.review-metric {padding:var(--space-5) 0}
+.review-metric-label {margin-bottom:var(--space-4)}
+.review-metric .two-grid {gap:var(--space-4)}
+.compare-grid {margin-top:var(--space-6)}
+.compare-grid .metric {margin:var(--space-3) 0;padding:var(--space-4)}
+
+/* Grid owns spacing between fields; labels own only label/control spacing.
+   This keeps tag inputs and ordinary fields aligned even with helper text. */
+label,.tag-field {margin-bottom:var(--layout-field-gap)}
+.enhanced-field {gap:var(--space-2);min-width:0}
+.form-grid,.profile-form-grid,.ds-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--layout-field-gap) var(--layout-grid-gap);align-items:start;margin-bottom:var(--layout-section-gap)}
+.form-grid>label,.profile-form-grid>label,.ds-fields>label,.profile-form-grid>.tag-field {margin-bottom:0}
+.tag-field>label {margin-bottom:var(--space-2)}
+.tag-field>small,.enhanced-field .field-hint,.enhanced-field .field-error {margin-top:var(--space-1)}
+.tag-editor {gap:var(--space-2);padding:var(--space-2);min-height:var(--layout-control-height)}
+.tag-suggestions {gap:var(--space-2);padding:var(--space-3);margin-top:var(--space-2)}
+input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not(.select-proxy):not(.tag-editor input),select:not(.select-proxy),textarea {min-height:var(--layout-control-height);padding:var(--space-2) var(--space-3)}
+button:not(.status-switch):not(.tag-chip button):not(.notification button),.button {min-height:var(--layout-control-height)}
+.field-check,.check {gap:var(--space-2)}
+.photo-picker {padding:var(--space-4);gap:var(--space-4);margin-bottom:var(--space-6)}
+.photo-picker label {margin-bottom:var(--space-2)}
+.assignment-picker {padding:var(--space-4);margin:var(--space-6) 0}
+.assignment-heading {gap:var(--space-3);margin-bottom:var(--space-4)}
+.assignment-options {gap:var(--space-3) var(--space-4)}
+.assignment-options .field-check {margin:0}
+.dialog-body form {margin-top:0}
+.dialog-body form>button[type=submit] {margin-top:var(--space-4)}
+.dialog-body form>p:not(.note) {margin-block:var(--space-4)}
+.actions {gap:var(--space-3);margin-top:var(--space-6)}
+.upload-form {padding:var(--layout-card-inset)}
+.upload-form h2 {margin:0 0 var(--space-4)}
+.drop-zone {padding:var(--space-8);gap:var(--space-3);margin-bottom:var(--space-6)}
+.file-previews {gap:var(--space-3);margin-bottom:var(--space-6)}
+.note,.integration-note,.insight-answer,.inline-alert {padding:var(--space-4);margin-bottom:var(--space-6)}
+
+/* Wrapping, equal-width filter tracks rather than uneven flex widths. */
+.filter-desktop {padding:var(--space-5);margin-bottom:var(--space-3)}
+.filter-form {display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--space-4);align-items:end}
+.filter-form>label,.filter-form>button {margin:0;min-width:0}
+.filter-form>button {align-self:end}
+.filter-caption {gap:var(--space-2);margin:var(--space-3) 0 var(--space-6)}
+.drawer .filter-form {display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-4)}
+.drawer .filter-form>label,.drawer .filter-form>button {margin:0}
+
+/* Tables stay scrollable; action groups wrap within their column. */
+th,td {padding:var(--space-4) var(--space-5)}
+.person-cell {gap:var(--space-3)}
+.row-actions {gap:var(--space-2);flex-wrap:wrap;min-width:240px;max-width:360px}
+.row-actions button {white-space:nowrap}
+.enhanced-pagination {padding:var(--space-4) var(--space-5);gap:var(--space-4);border-top:1px solid var(--color-border-subtle)}
+.pagination-buttons {gap:var(--space-3)}
+.enhanced-pagination .enhanced-field {gap:var(--space-2);margin:0}
+
+/* Fixed header and scrolling body prevent long forms from hiding close actions. */
+.overlay {padding:var(--space-6)}
+.drawer-overlay {padding:0}
+.dialog {display:flex;flex-direction:column;max-height:calc(100dvh - var(--space-12));overflow:visible}
+.dialog>header,.drawer>header {flex-shrink:0;padding:var(--space-4) var(--space-6);gap:var(--space-4)}
+.dialog-body {min-height:0;padding:var(--layout-card-inset);overflow:auto}
+.drawer>.dialog-body,.dialog>.dialog-body {flex:1}
+.login-page {padding:var(--space-6)}
+.login-card {padding:var(--space-8);margin:0}
+.login-card h1 {margin-top:var(--space-8)}
+.login-card form {margin-top:var(--space-6)}
+.login-card form>.primary {margin:var(--space-1) 0 var(--space-6)}
+.login-card footer {margin-top:var(--space-6);padding-top:var(--space-6);padding-bottom:0}
+.skeleton-kpis,.skeleton-charts,.skeleton-fields {gap:var(--layout-grid-gap);margin-bottom:var(--layout-section-gap)}
+.ds-swatches {gap:var(--space-4)}
+.ds-actions,.ds-badges {gap:var(--space-3)}
+.layout-scale {display:flex;flex-wrap:wrap;gap:var(--space-4);margin-top:var(--space-4)}
+.layout-scale>div {display:flex;flex-direction:column;gap:var(--space-2);min-width:64px}
+.layout-scale i {height:var(--space-2);background:var(--color-primary);border-radius:4px;max-width:100%}
+.layout-grid-example {display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--space-2);margin-top:var(--space-4)}
+.layout-grid-example>span {background:var(--color-selected-bg);color:var(--color-selected-fg);padding:var(--space-3) 0;text-align:center;border-radius:4px}
+
+@media(max-width:1279px) {
+ :root {--layout-sidebar:208px;--layout-page-inset:var(--space-6)}
+ .kpi-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+ .review-grid {grid-template-columns:minmax(0,1fr)}
+ .evidence {position:static}
+}
+@media(max-width:1023px) {
+ .dashboard-widgets {grid-template-columns:minmax(0,1fr)}
+ .two-grid {grid-template-columns:minmax(0,1fr)}
+ .kpi-grid.three {grid-template-columns:repeat(3,minmax(0,1fr))}
+.kpi-grid>.metric,.business-grid>.metric {margin:0}
+}
+@media(max-width:767px) {
+ :root {--layout-page-inset:var(--space-4);--layout-grid-gap:var(--space-4);--layout-card-inset:var(--space-4);--layout-field-gap:var(--space-4)}
+ .workspace {margin-left:0}
+ .sidebar {width:232px}
+ .topbar {height:64px;padding-inline:var(--space-3);gap:var(--space-2)}
+ .workspace>main {padding:var(--space-6) var(--layout-page-inset)}
+ .page-header {gap:var(--space-4);margin-bottom:var(--space-6)}
+ .page-header .export-actions {flex-direction:row}
+ .brand-selector {max-width:220px;min-width:0}
+ .topbar-right {gap:var(--space-2)}
+ .kpi-grid.three {grid-template-columns:repeat(2,minmax(0,1fr))}
+ .metric {min-height:152px}
+ .metric>strong {margin:var(--space-4) 0 var(--space-2)}
+ .business-grid {padding:var(--space-3);gap:var(--space-3)}
+ .form-grid,.profile-form-grid,.ds-fields {grid-template-columns:minmax(0,1fr)}
+ .list-controls {align-items:stretch}
+ .list-controls>label {flex-basis:100%}
+ .overlay {padding:0}
+ .dialog {height:100dvh;max-height:100dvh;border-radius:0}
+ .dialog>header,.drawer>header {padding:var(--space-3) var(--space-4)}
+ .drawer-overlay {padding:0}
+ .photo-picker {align-items:flex-start;gap:var(--space-3)}
+ .assignment-options {grid-template-columns:minmax(0,1fr)}
+ .compare-grid {grid-template-columns:minmax(0,1fr)}
+ .compare-grid .metric {padding:var(--space-4);min-height:128px}
+ .compare-grid .metric>strong {font-size:24px}
+ .compare-grid .metric>div,.compare-grid small {font-size:12px}
+ th,td {padding:var(--space-3) var(--space-4)}
+ .enhanced-pagination {padding:var(--space-4)}
+ .enhanced-pagination .pagination-buttons {gap:var(--space-2)}
+ .login-page {padding:var(--space-4)}
+ .login-card {padding:var(--space-6)}
+ footer {padding-bottom:var(--space-12)}
+ .layout-grid-example {grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+/* Keep brand names readable on compact phones and long currency values intact. */
+@media(max-width:479px) {
+ .topbar .person-avatar {display:none}
+}
+@media(max-width:379px) {
+ .kpi-grid,.kpi-grid.three {grid-template-columns:minmax(0,1fr)}
+ .metric {min-height:136px}
+}
+
+.formula-section {margin-bottom:var(--space-8)}
+.formula-heading {display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-5)}
+.formula-heading h2 {display:flex;align-items:center;gap:var(--space-2)}
+.formula-heading p,.formula-details p,.formula-score p {font-size:12px}
+.formula-heading>.status {flex-shrink:0}
+.formula-score {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:var(--space-6);padding:var(--layout-card-inset)}
+.formula-score>div>strong {font-size:36px;line-height:1.3}
+.formula-score>div>strong small {display:inline;font-size:16px}
+.formula-warning,.formula-input-state {display:flex;align-items:flex-start;gap:var(--space-2)}
+.formula-warning {color:var(--color-warning-text)}
+.formula-warning svg,.formula-input-state svg {flex-shrink:0;margin-top:2px}
+.formula-section>.note {display:flex;align-items:flex-start;gap:var(--space-2)}
+.formula-section>.note>svg {flex-shrink:0;margin-top:2px}
+.formula-section>.note ul {margin:0;padding-left:var(--space-4)}
+.formula-details {padding:var(--space-4) var(--layout-card-inset)}
+.formula-details>summary {cursor:pointer;min-height:32px;font-weight:var(--font-weight-label)}
+.formula-details[open]>summary {margin-bottom:var(--space-4)}
+.formula-details .table-wrap {margin-top:var(--space-4)}
+.formula-details td {white-space:normal;min-width:140px;text-align:left!important}
+.formula-details th {text-align:left!important}
+@media(max-width:767px){.formula-score{grid-template-columns:minmax(0,1fr)}.formula-heading{flex-wrap:wrap}.formula-grid .metric{min-height:160px}.formula-grid .metric>strong{font-size:22px}}

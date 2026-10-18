@@ -1,0 +1,28 @@
+node_modules/
+dist/
+frontend/dist/
+.local/
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+uploads/
+backups/
+*.log
+.DS_Store
+
+# Local databases, credentials, editor/runtime artifacts
+*.dump
+*.sql.gz
+*.sqlite
+*.sqlite3
+*.db
+*.pem
+*.key
+__pycache__/
+*.pyc
+coverage/
+.vscode/
+.idea/
+# Local database client screenshot is not application source
+docs/screenshots/tableplus-local.png

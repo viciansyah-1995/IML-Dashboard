@@ -1,0 +1,7 @@
+# Fixtures and independent reference
+
+`mock-evidence.png` is a plain synthetic test image, not a platform screenshot. Mock extraction reads predefined values, not pixels. Every fixture carries a demo label. Actual TikTok/Shopee screenshot files were not supplied; the BRD numeric examples remain source references and do not prove host-slot attribution.
+
+`expected-totals.json` is the manually reconciled seed baseline. TikTok has 18 final slots (indices 0–17), each 2 hours. Host A has five slots: four readable views values 1000 + 0 + 1000 + 1000 = 3000; one missing views value. Host B has 5 × 1500 = 7500. Host C has 4 × 2000 = 8000. Host D has 4 × 2500 = 10000. Sales are respectively 5 × 1,000,000; 5 × 1,250,000; 4 × 1,500,000; 4 × 1,750,000. Total sales 24,250,000 / total orders 485 = 50,000 AOV. Total 36 hours gives 673611.1111 IDR/hour. Seventeen complete interaction slots each contain 100 + 20 + 5 = 125, totaling 2125. Missing shares in the remaining slot exclude that slot from interactions, not from sales or activity.
+
+Brand A uses indices 0,3,6,9,12,15: views 1000+2500+2000+1500+1000+2500=10500; sales 1m+1.75m+1.5m+1.25m+1m+1.75m=8.25m; orders 165; six slots/12 hours; interactions 750. Room GMV 15,484,967 does not enter any host total. Live QA uploads may extend the running demo after this baseline; the integration suite recreates its own isolated seed before asserting baseline results.

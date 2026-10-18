@@ -1,0 +1,67 @@
+{
+  "fixture": "Opt-in synthetic seed; TikTok 2026-09-21 through 2026-10-11 before QA uploads",
+  "global": {
+    "slots": 18,
+    "hours": "36",
+    "views": "28500",
+    "sales_IDR": "24250000",
+    "orders": "485",
+    "interactions": "2125",
+    "views_eligible_slots": 17,
+    "interactions_eligible_slots": 17,
+    "aov_IDR": "50000",
+    "sales_per_hour_IDR": "673611.1111"
+  },
+  "hosts": {
+    "Host A": {
+      "views": "3000",
+      "sales_IDR": "5000000",
+      "slots": 5
+    },
+    "Host B": {
+      "views": "7500",
+      "sales_IDR": "6250000",
+      "slots": 5
+    },
+    "Host C": {
+      "views": "8000",
+      "sales_IDR": "6000000",
+      "slots": 4
+    },
+    "Host D": {
+      "views": "10000",
+      "sales_IDR": "7000000",
+      "slots": 4
+    }
+  },
+  "brand_a": {
+    "views": "10500",
+    "sales_IDR": "8250000",
+    "slots": 6,
+    "hours": "12",
+    "interactions": "750",
+    "orders": "165",
+    "aov_IDR": "50000",
+    "sales_per_hour_IDR": "687500"
+  },
+  "room_sample": {
+    "sales_IDR": "15484967",
+    "views": "61520",
+    "included_in_host_aggregates": false
+  },
+  "shopee_source_fixture": {
+    "sales_IDR": "349000",
+    "views": "980",
+    "viewers": "759",
+    "orders": "1",
+    "buyers": "1",
+    "watch_duration_seconds": "26",
+    "comments": "49",
+    "add_to_cart": "49",
+    "units_sold": "1",
+    "impressions": null,
+    "product_clicks": null,
+    "new_followers": null,
+    "period_confirmed": false
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "database": "iml_restore_20261011110729611562_test",
+  "backup": "backups/20261011T110707Z",
+  "counts": {
+    "users": 5,
+    "slots": 28,
+    "reports": 28,
+    "attachments": 28
+  },
+  "verified_attachment_hashes": 28,
+  "status": "passed"
+}

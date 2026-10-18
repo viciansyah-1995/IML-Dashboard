@@ -1,0 +1,2 @@
+import {useState} from 'react';
+export function useLocalPagination<T>(items:T[],scope:string,initialSize=10){const [state,setState]=useState({scope,page:1,size:initialSize});const pages=Math.max(1,Math.ceil(items.length/state.size)),page=state.scope===scope?Math.min(state.page,pages):1;return {page,pageSize:state.size,total:items.length,items:items.slice((page-1)*state.size,page*state.size),onChange:(next:number)=>setState({...state,scope,page:next}),onPageSize:(size:number)=>setState({scope,page:1,size})}}
