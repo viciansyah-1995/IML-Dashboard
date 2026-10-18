@@ -1,5 +1,11 @@
 GO := ./scripts/go
-.PHONY: db-up db-native migrate seed-demo run worker worker-env frontend-install frontend-dev frontend-build frontend-check frontend-test test test-integration fmt vet backup
+.PHONY: install-local db-schema db-up db-native migrate seed-demo run worker worker-env frontend-install frontend-dev frontend-build frontend-check frontend-test test test-integration fmt vet backup
+
+install-local:
+	python3 scripts/install-local.py $(ARGS)
+
+db-schema:
+	python3 scripts/export-schema.py
 
 db-up:
 	docker compose up -d db
@@ -23,7 +29,7 @@ worker: worker-env
 	$(GO) run ./cmd/worker
 
 frontend-install:
-	npm ci --prefix frontend --cache /private/tmp/iml-npm-cache
+	npm ci --prefix frontend
 
 frontend-dev:
 	npm run dev --prefix frontend

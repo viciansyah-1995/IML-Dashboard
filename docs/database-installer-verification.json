@@ -1,0 +1,17 @@
+{
+  "native_clean_install": "passed",
+  "counts": {
+    "users": 5,
+    "brands": 3,
+    "hosts": 6,
+    "slots": 28,
+    "migrations": 5
+  },
+  "repeat_install_preserves_data_and_credentials": true,
+  "private_file_modes": "0600",
+  "frontend_dependencies_installed": true,
+  "docker_path": "not executed: Docker unavailable on verification host",
+  "manual_schema_install": "passed",
+  "go_migration_after_sql": "passed",
+  "second_sql_import_rolls_back": true
+}

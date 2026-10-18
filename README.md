@@ -15,16 +15,17 @@ Aplikasi aktif memakai **React 19 + TypeScript + Vite** (`frontend/`), **Go** (`
 
 ## Menjalankan lokal
 
-Prasyarat: Node.js >=22.18, Go sesuai `go.mod`, PostgreSQL 17 dan `make`. Untuk jalur PostgreSQL native, sediakan juga `initdb`, `pg_ctl`, `psql`, `createdb`, `openssl`, dan `rg` pada PATH.
+Prasyarat: Python >=3.9, Node.js >=22.18, Go sesuai `go.mod`, PostgreSQL 17 dan `make`. Untuk jalur PostgreSQL native, sediakan juga `initdb`, `pg_ctl`, `psql`, `createdb` pada PATH.
 
 ```sh
-npm run setup
-make db-native
-make migrate
-make seed-demo
+python3 scripts/install-local.py --database native
+# Alternatif PostgreSQL via Docker:
+# python3 scripts/install-local.py --database docker
 ```
 
-`make db-native` menyiapkan cluster khusus project di `127.0.0.1:55432` dan membuat `.env` privat jika belum ada. Perintah ini tidak menimpa `.env` yang sudah ada. Kredensial demo dibuat oleh seed dan tersimpan lokal di `.local/demo-credentials.json`; file tersebut tidak disertakan di Git.
+Installer menyiapkan `.env` privat, PostgreSQL, migrasi terbaru, data demo dan dependency frontend. Database tersedia di `127.0.0.1:55432`; kredensial baru dibuat untuk setiap komputer di `.local/demo-credentials.json`. Konfigurasi dan data lama tidak ditimpa saat installer dijalankan ulang.
+
+Lihat [panduan instalasi database](database/README.md) untuk prasyarat, port alternatif, instalasi manual SQL, dan pemindahan data aktual. File [schema.sql](database/schema.sql) dapat dipakai pada database kosong tanpa menginstal Go untuk tahap pembuatan schema.
 
 Jalankan pada terminal terpisah:
 
@@ -35,8 +36,6 @@ make worker       # diperlukan untuk pekerjaan ekstraksi berantrean
 ```
 
 `npm run dev` di root juga menjalankan UI terbaru. Login di [halaman login lokal](http://127.0.0.1:5173/login). API menyediakan `/healthz` dan `/readyz`.
-
-Alternatif Docker: salin `.env.example` menjadi `.env`, isi `DATABASE_URL`, `POSTGRES_PASSWORD`, serta `WORKER_TOKEN` dengan nilai lokal yang kuat, lalu jalankan `make db-up` dan langkah migrasi/seed di atas. Jangan memakai placeholder `CHANGE_ME` sebagai kredensial nyata. Aktifkan `DEMO_MODE=true` jika ingin memakai seed demo.
 
 ## Verifikasi
 
