@@ -10,11 +10,16 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type Upload struct {
+	IntakeID        string     `json:"intake_id,omitempty"`
+	IntakeRevision  int        `json:"intake_revision,omitempty"`
+	AutoMetadata    bool       `json:"auto_metadata"`
 	Brand           string     `json:"brand_id"`
 	Account         string     `json:"account_id"`
 	Studio          string     `json:"studio_id"`
@@ -61,6 +66,84 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 		a.err(w, r, 400, "METADATA", "Metadata tidak valid")
 		return
 	}
+	var intakeData *intakeDTO
+	var intakeValues []reports.Value
+	var intakeFiles []staged
+	if in.IntakeID != "" {
+		d, err := a.intakeRead(r.Context(), in.IntakeID, user(r).ID)
+		if err != nil {
+			a.err(w, r, 404, "NOT_FOUND", "Draft tidak ditemukan")
+			return
+		}
+		if d.Status == "submitted" && d.ReportID != nil {
+			respond(w, 200, map[string]string{"id": *d.ReportID})
+			return
+		}
+		if d.Status != "extracted" || d.Step != 4 || d.Result == nil || d.Revision != in.IntakeRevision {
+			a.err(w, r, 409, "REVISION", "Draft berubah atau belum selesai diperiksa")
+			return
+		}
+		intakeData = &d
+		in.Channel = d.Channel
+		in.Definition = d.Mapping
+		in.Mode = "manual"
+		in.AutoMetadata = false
+		proposed := automaticObservation(*d.Result, d.Channel, in.Start, in.End)
+		in.Scope = proposed.Scope
+		in.Basis = proposed.Basis
+		in.PeriodStart = proposed.Start
+		in.PeriodEnd = proposed.End
+		in.PeriodConfirmed = proposed.Confirmed
+		in.CapturedAt = nil
+		intakeValues, err = applyIntakeCorrections(*d.Result, d.Definitions, d.Corrections)
+		if err != nil {
+			a.err(w, r, 400, "CORRECTION", err.Error())
+			return
+		}
+		rows, err := a.DB.Query(r.Context(), "SELECT id,storage_key,original_name,content_type,content_hash FROM intake_attachments WHERE intake_id=$1", d.ID)
+		if err != nil {
+			a.err(w, r, 500, "DATABASE", "Bukti draft belum terbaca")
+			return
+		}
+		for rows.Next() {
+			var f staged
+			if err = rows.Scan(&f.ID, &f.Key, &f.Name, &f.Mime, &f.Hash); err != nil {
+				break
+			}
+			f.Bytes, err = (storage.Local{Root: a.C.UploadDir}).Read(f.Key)
+			if err != nil {
+				break
+			}
+			if storage.Hash(f.Bytes) != f.Hash {
+				err = fmt.Errorf("bukti berubah")
+				break
+			}
+			intakeFiles = append(intakeFiles, f)
+		}
+		if err == nil {
+			err = rows.Err()
+		}
+		rows.Close()
+		if err != nil {
+			a.err(w, r, 409, "EVIDENCE", "Gambar draft tidak tersedia atau berubah; unggah ulang screenshot")
+			return
+		}
+	}
+	if in.AutoMetadata {
+		// Never accept a client-selected mapping or invented source period in automatic mode.
+		in.Definition = in.Channel + "-screenshot-v1"
+		in.PeriodStart, in.PeriodEnd, in.CapturedAt = nil, nil, nil
+		in.PeriodConfirmed = false
+		in.Scope = "room"
+		in.Basis = "Belum terbaca"
+		if in.Channel == "tiktok" {
+			in.Basis = "Pesanan Teratribusi"
+		}
+	}
+	if user(r).Role == "host" && (intakeData == nil || in.Host != user(r).HostID) {
+		a.err(w, r, 403, "FORBIDDEN", "Host hanya dapat mengajukan laporan atas profil host sendiri melalui wizard screenshot")
+		return
+	}
 	dur, e := reports.Duration(in.Start, in.End)
 	if e != nil {
 		a.err(w, r, 400, "DURATION", e.Error())
@@ -78,14 +161,18 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 		a.err(w, r, 400, "PERIOD", "Periode sumber tidak valid")
 		return
 	}
-	if in.Basis == "" || (in.Channel == "shopee" && in.Basis != "Pesanan Dibuat" && in.Basis != "Pesanan Selesai") || (in.Channel == "tiktok" && in.Basis != "Pesanan Teratribusi") {
+	if intakeData == nil && !in.AutoMetadata && (in.Basis == "" || (in.Channel == "shopee" && in.Basis != "Pesanan Dibuat" && in.Basis != "Pesanan Selesai") || (in.Channel == "tiktok" && in.Basis != "Pesanan Teratribusi")) {
 		a.err(w, r, 400, "BASIS", "Basis pesanan wajib dan harus sesuai channel")
 		return
 	}
 	if in.Mode == "" {
 		in.Mode = a.C.Mode
 	}
-	if in.Mode != "manual" && in.Mode != "mock" && in.Mode != "openclaw" || in.Mode == "mock" && !a.C.Demo || in.Mode == "openclaw" && a.C.Mode != "openclaw" {
+	if in.Mode == "openclaw" && a.C.Mode != "openclaw" {
+		a.err(w, r, 400, "MODE", "OpenClaw belum dikonfigurasi pada server. Administrator perlu mengatur EXTRACTION_MODE=openclaw, Gateway, token dan agent ekstraksi, lalu menjalankan worker. Lampiran belum disimpan; coba kembali setelah layanan siap.")
+		return
+	}
+	if in.Mode != "manual" && in.Mode != "mock" && in.Mode != "openclaw" || in.Mode == "mock" && !a.C.Demo {
 		a.err(w, r, 400, "MODE", "Mode ekstraksi tidak diizinkan/terkonfigurasi")
 		return
 	}
@@ -100,11 +187,11 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	files := r.MultipartForm.File["files"]
-	if len(files) == 0 || len(files) > a.C.MaxFiles {
+	if intakeData == nil && (len(files) == 0 || len(files) > a.C.MaxFiles) {
 		a.err(w, r, 400, "FILES", "Wajib 1–10 lampiran")
 		return
 	}
-	list := []staged{}
+	list := intakeFiles
 	for _, f := range files {
 		reader, e := f.Open()
 		if e != nil {
@@ -149,6 +236,15 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 		respond(w, 200, map[string]string{"id": existing})
 		return
 	}
+	if intakeData != nil {
+		var current int
+		var state string
+		e = tx.QueryRow(r.Context(), "SELECT revision,status FROM upload_intakes WHERE id=$1 AND created_by=$2 FOR UPDATE", in.IntakeID, user(r).ID).Scan(&current, &state)
+		if e != nil || current != in.IntakeRevision || state != "extracted" {
+			a.err(w, r, 409, "REVISION", "Draft sudah berubah atau diajukan; muat ulang")
+			return
+		}
+	}
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 	day := in.Start.In(loc).Format("2006-01-02")
 	line := in.IDLine
@@ -164,6 +260,22 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	if len(line) > 64 {
 		a.err(w, r, 400, "ID_LINE", "ID Line terlalu panjang")
 		return
+	}
+	if intakeData != nil && in.IDLine != "" {
+		matched, _ := regexp.MatchString(`^\d{6}-\d{5}$`, line)
+		if !matched || !strings.HasPrefix(line, in.Start.In(loc).Format("060102")) {
+			a.err(w, r, 400, "ID_LINE", "ID Line harus YYMMDD-00001 dan tanggalnya sesuai tanggal mulai slot")
+			return
+		}
+		number, _ := strconv.Atoi(line[7:])
+		if number < 1 {
+			a.err(w, r, 400, "ID_LINE", "Nomor ID Line harus lebih dari nol")
+			return
+		}
+		if _, e = tx.Exec(r.Context(), "INSERT INTO daily_counters(day,number) VALUES($1,$2) ON CONFLICT(day) DO UPDATE SET number=GREATEST(daily_counters.number,excluded.number)", day, number); e != nil {
+			a.err(w, r, 500, "DATABASE", "Nomor laporan belum tersimpan")
+			return
+		}
 	}
 	// Serialize the identity of a host slot independently of request idempotency.
 	identity := in.Brand + "|" + in.Account + "|" + in.Host + "|" + in.Start.UTC().Format(time.RFC3339) + "|" + in.End.UTC().Format(time.RFC3339)
@@ -202,7 +314,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if e == nil {
-		_, e = tx.Exec(r.Context(), "INSERT INTO source_reports(id,slot_id,room_id,scope,period_start,period_end,captured_at,basis,definition_version,period_confirmed,created_by,idempotency_key,is_demo) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)", source, slot, room, in.Scope, in.PeriodStart, in.PeriodEnd, in.CapturedAt, in.Basis, in.Definition, in.PeriodConfirmed, user(r).ID, idem, a.C.Demo)
+		_, e = tx.Exec(r.Context(), "INSERT INTO source_reports(id,slot_id,room_id,scope,period_start,period_end,captured_at,basis,definition_version,period_confirmed,created_by,idempotency_key,is_demo,auto_metadata) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)", source, slot, room, in.Scope, in.PeriodStart, in.PeriodEnd, in.CapturedAt, in.Basis, in.Definition, in.PeriodConfirmed, user(r).ID, idem, a.C.Demo, in.AutoMetadata)
 	}
 	subject := slot
 	if in.Scope == "room" {
@@ -226,14 +338,34 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	}()
 	if e == nil {
 		for _, f := range list {
-			if e = local.Put(f.Key, f.Bytes); e != nil {
-				break
+			if intakeData == nil {
+				if e = local.Put(f.Key, f.Bytes); e != nil {
+					break
+				}
+				written = append(written, f.Key)
 			}
-			written = append(written, f.Key)
 			_, e = tx.Exec(r.Context(), "INSERT INTO attachments(id,source_report_id,original_name,storage_key,content_type,content_hash,bytes) VALUES($1,$2,$3,$4,$5,$6,$7)", f.ID, source, f.Name, f.Key, f.Mime, f.Hash, len(f.Bytes))
 			if e != nil {
 				break
 			}
+		}
+	}
+	if e == nil && intakeData != nil {
+		var normalized []reports.Value
+		normalized, e = a.validateValues(r.Context(), tx, source, intakeData.Definitions, intakeValues)
+		for _, v := range normalized {
+			if e == nil {
+				e = insertValue(r.Context(), tx, version, v)
+			}
+		}
+		if e == nil {
+			_, e = tx.Exec(r.Context(), "UPDATE report_versions SET status='review',reason='Diajukan oleh uploader setelah pemeriksaan hasil AI',validity_status='unverified' WHERE id=$1", version)
+		}
+		if e == nil {
+			_, e = tx.Exec(r.Context(), "UPDATE upload_intakes SET status='submitted',report_id=$2,metadata=jsonb_set(metadata,'{id_line}',to_jsonb($3::text)),revision=revision+1,updated_at=now() WHERE id=$1", in.IntakeID, version, line)
+		}
+		if e == nil {
+			e = a.audit(r.Context(), tx, user(r).ID, "intake_submitted", in.IntakeID, map[string]any{"report_id": version, "corrections": intakeData.Corrections})
 		}
 	}
 	if e == nil && in.Mode != "manual" {

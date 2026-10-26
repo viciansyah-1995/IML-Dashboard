@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -23,6 +24,29 @@ func TestMockAndOffline(t *testing.T) {
 	out, e = (OpenClawExtractor{BaseURL: "http://127.0.0.1:1", Token: "test-secret", Agent: "extract-only", Timeout: 100 * time.Millisecond}).Extract(context.Background(), in)
 	if e == nil || len(out.Values) != 0 {
 		t.Fatal("offline must not fake metrics")
+	}
+}
+
+func TestScreenshotInstructionsAndPeriodGuard(t *testing.T) {
+	for channel, expected := range map[string]string{"tiktok": "Perkiraan GMV -> estimated_sales", "shopee": "Dilihat/Views -> views"} {
+		prompt := screenshotPrompt(Input{Channel: channel, Operator: OperatorContext{Host: "Nurul", IDLine: "261020-00001"}})
+		if !strings.Contains(prompt, expected) || !strings.Contains(prompt, "261020-00001") || !strings.Contains(prompt, "Never derive product_clicks") {
+			t.Fatal("missing channel/operator contract", channel)
+		}
+	}
+	start, _ := time.Parse(time.RFC3339, "2026-10-20T15:00:00+07:00")
+	end := start.Add(3 * time.Hour)
+	duration := 40846
+	out := Output{ObservedScope: "host_slot", PeriodReadable: true, Observation: &Observation{PeriodStart: "2026-10-20T06:42:38+07:00", PeriodEnd: "2026-10-20T18:03:33+07:00", DurationSeconds: &duration, Evidence: "11j20m46d; header 06:42:38–18:03:33"}}
+	if err := CheckObservation(&out, start, end, "host_slot", "Pesanan Teratribusi"); err != nil {
+		t.Fatal(err)
+	}
+	if out.ObservedScope != "room" || !strings.Contains(strings.Join(out.Flags, ","), "SCOPE_MISMATCH") || !strings.Contains(strings.Join(out.Flags, ","), "CONFLICT") {
+		t.Fatal(out)
+	}
+	out.Observation.PeriodStart = "invalid"
+	if CheckObservation(&out, start, end, "host_slot", "Pesanan Teratribusi") == nil {
+		t.Fatal("invalid timestamp accepted")
 	}
 }
 func TestOpenClawContract(t *testing.T) {

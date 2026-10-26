@@ -8,12 +8,21 @@ import (
 	"iml/internal/auth"
 	"iml/internal/reports"
 	"net/http"
+	"time"
 )
 
 type ReviewInput struct {
+	Basis    string          `json:"basis,omitempty"`
+	Scope    string          `json:"scope,omitempty"`
+	Period   *ReviewPeriod   `json:"period,omitempty"`
 	Revision int             `json:"revision"`
 	Reason   string          `json:"reason"`
 	Values   []reports.Value `json:"values"`
+}
+type ReviewPeriod struct {
+	Start     *time.Time `json:"start"`
+	End       *time.Time `json:"end"`
+	Confirmed bool       `json:"confirmed"`
 }
 
 func (a *App) reportAction(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -51,7 +60,17 @@ func (a *App) reportAction(w http.ResponseWriter, r *http.Request, parts []strin
 			versions = append(versions, map[string]any{"id": id, "number": n, "status": status, "active": active, "reason": reason, "published_at": at})
 		}
 		history.Close()
-		respond(w, 200, map[string]any{"report": rec, "definitions": defs, "attachments": attachments, "history": versions, "blockers": reports.Blockers(rec, defs)})
+		var wasPublished bool
+		if err := a.DB.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM report_versions WHERE source_report_id=$1 AND published_at IS NOT NULL)", rec.SourceID).Scan(&wasPublished); err != nil {
+			a.err(w, r, 500, "DATABASE", "Riwayat sumber tidak terbaca")
+			return
+		}
+		var observation json.RawMessage
+		a.DB.QueryRow(r.Context(), "SELECT er.result->'observation' FROM extraction_runs er JOIN processing_jobs j ON j.id=er.job_id WHERE j.source_report_id=$1 ORDER BY er.created_at DESC LIMIT 1", rec.SourceID).Scan(&observation)
+		if len(observation) == 0 {
+			a.DB.QueryRow(r.Context(), "SELECT result->'observation' FROM upload_intakes WHERE report_id=$1", rec.ID).Scan(&observation)
+		}
+		respond(w, 200, map[string]any{"metadata_editable": !wasPublished && user(r).Can("review_report"), "observation": observation, "report": rec, "definitions": defs, "attachments": attachments, "history": versions, "blockers": reports.Blockers(rec, defs), "screenshot": reports.ScreenshotFormula(rec)})
 		return
 	}
 	if len(parts) != 3 || r.Method != "POST" {
@@ -118,6 +137,79 @@ func (a *App) reportAction(w http.ResponseWriter, r *http.Request, parts []strin
 		if len(values) == 0 {
 			a.err(w, r, 400, "METRIC", "Isi hasil review dari bukti")
 			return
+		}
+		if input.Basis != "" || input.Scope != "" {
+			basis, scope := rec.Basis, rec.Scope
+			if input.Basis != "" {
+				basis = input.Basis
+			}
+			if input.Scope != "" {
+				scope = input.Scope
+			}
+			if !validSourceBasis(rec.Channel, basis) || (scope != "room" && scope != "host_slot" && scope != "snapshot") {
+				a.err(w, r, 400, "METADATA", "Basis atau cakupan tidak sesuai channel")
+				return
+			}
+			var published bool
+			if err := tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM report_versions WHERE source_report_id=$1 AND published_at IS NOT NULL)", rec.SourceID).Scan(&published); err != nil || published {
+				a.err(w, r, 409, "METADATA", "Metadata laporan yang pernah dipublikasikan tidak dapat diubah; unggah bukti baru.")
+				return
+			}
+			subject := rec.SlotID
+			if scope == "room" {
+				subject = rec.RoomID
+			}
+			if _, e = tx.Exec(r.Context(), "SELECT pg_advisory_xact_lock(hashtext($1))", subject+scope+basis); e != nil {
+				a.err(w, r, 500, "DATABASE", "Metadata gagal dikunci")
+				return
+			}
+			if _, e = tx.Exec(r.Context(), "UPDATE source_reports SET basis=$2,scope=$3 WHERE id=$1", rec.SourceID, basis, scope); e != nil {
+				a.err(w, r, 500, "DATABASE", "Metadata gagal disimpan")
+				return
+			}
+			if _, e = tx.Exec(r.Context(), "UPDATE report_versions SET basis=$2,scope=$3,subject_key=$4 WHERE id=$1", id, basis, scope, subject); e != nil {
+				a.err(w, r, 500, "DATABASE", "Metadata versi gagal disimpan")
+				return
+			}
+			rec.Basis, rec.Scope = basis, scope
+			flags := []string{}
+			for _, flag := range rec.SourceFlags {
+				if flag != "SCOPE_MISMATCH" || scope != "room" {
+					flags = append(flags, flag)
+				}
+			}
+			rec.SourceFlags = flags
+		}
+		if input.Period != nil {
+			p := input.Period
+			if p.Start == nil || p.End == nil || !p.End.After(*p.Start) || p.End.Sub(*p.Start) > 24*time.Hour {
+				a.err(w, r, 400, "PERIOD", "Lengkapi periode sumber yang valid, maksimal 24 jam")
+				return
+			}
+			var published bool
+			if err := tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM report_versions WHERE source_report_id=$1 AND published_at IS NOT NULL)", rec.SourceID).Scan(&published); err != nil {
+				a.err(w, r, 500, "DATABASE", "Riwayat periode tidak terbaca")
+				return
+			}
+			if published {
+				a.err(w, r, 409, "PERIOD", "Periode bukti yang pernah dipublikasikan tidak dapat diubah. Unggah bukti baru untuk periode berbeda.")
+				return
+			}
+			_, e = tx.Exec(r.Context(), "UPDATE source_reports SET period_start=$2,period_end=$3,period_confirmed=$4 WHERE id=$1", rec.SourceID, p.Start, p.End, p.Confirmed)
+			if e != nil {
+				a.err(w, r, 500, "DATABASE", "Periode sumber tidak tersimpan")
+				return
+			}
+			rec.PeriodStart, rec.PeriodEnd, rec.PeriodConfirmed = p.Start, p.End, p.Confirmed
+			if p.Confirmed {
+				flags := []string{}
+				for _, flag := range rec.SourceFlags {
+					if flag != "PERIOD_UNCONFIRMED" {
+						flags = append(flags, flag)
+					}
+				}
+				rec.SourceFlags = flags
+			}
 		}
 		_, e = tx.Exec(r.Context(), "DELETE FROM report_metric_values WHERE version_id=$1", id)
 		for _, v := range values {
@@ -201,6 +293,9 @@ func (a *App) reportAction(w http.ResponseWriter, r *http.Request, parts []strin
 	respond(w, 200, map[string]string{"id": id})
 }
 func (a *App) validateValues(ctx context.Context, tx pgx.Tx, source string, defs []reports.Definition, values []reports.Value) ([]reports.Value, error) {
+	return a.validateEvidenceValues(ctx, tx, source, defs, values, false)
+}
+func (a *App) validateEvidenceValues(ctx context.Context, tx pgx.Tx, source string, defs []reports.Definition, values []reports.Value, intake bool) ([]reports.Value, error) {
 	allowed := map[string]reports.Definition{}
 	for _, d := range defs {
 		allowed[d.Key] = d
@@ -241,7 +336,11 @@ func (a *App) validateValues(ctx context.Context, tx pgx.Tx, source string, defs
 		}
 		if v.AttachmentID != nil {
 			var ok bool
-			e := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM attachments WHERE id=$1 AND source_report_id=$2)", *v.AttachmentID, source).Scan(&ok)
+			query := "SELECT EXISTS(SELECT 1 FROM attachments WHERE id=$1 AND source_report_id=$2)"
+			if intake {
+				query = "SELECT EXISTS(SELECT 1 FROM intake_attachments WHERE id=$1 AND intake_id=$2)"
+			}
+			e := tx.QueryRow(ctx, query, *v.AttachmentID, source).Scan(&ok)
 			if e != nil || !ok {
 				return nil, fmt.Errorf("bukti tidak sesuai laporan")
 			}

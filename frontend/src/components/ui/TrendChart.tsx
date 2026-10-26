@@ -1,3 +1,4 @@
+import {UnavailableValue} from './UnavailableValue';
 import {Pagination} from './Interactions';
 import {useLocalPagination} from '../../lib/pagination';
 import {useEffect,useRef} from 'react';
@@ -22,5 +23,5 @@ export function TrendChart({title,rows,metric,from,to,bar=false}:{title:string;r
   let alive=true;void document.fonts?.ready.then(()=>{if(alive){chart.resize();chart.update('none')}});
   return()=>{alive=false;chart.destroy()};
  },[rows,metric,from,to,title,bar]);
- return <section className="card chart" data-metric={metric}><h2><span className="chart-key" aria-hidden="true"/>{title}</h2><p>{metric==='sales'?'IDR sesuai basis sumber':metric==='slots'?'Slot unik final':'Bukan orang unik lintas sesi'}</p><div className="canvas-wrap"><canvas ref={ref} role="img" aria-label={`${title}, ${from} sampai ${to}`}/></div>{values.filter(v=>v!=null).length<2&&<small>Butuh minimal 2 tanggal untuk melihat tren</small>}<details><summary>Lihat data grafik</summary><div className="table-wrap"><table><thead><tr><th>Tanggal</th><th>{title}</th></tr></thead><tbody>{paging.items.map(d=><tr key={d}><td>{d}</td><td>{num(values[days.indexOf(d)])}</td></tr>)}</tbody></table></div><Pagination label="tanggal" total={paging.total} page={paging.page} pageSize={paging.pageSize} onChange={paging.onChange}/></details></section>;
+ return <section className="card chart" data-metric={metric}><h2><span className="chart-key" aria-hidden="true"/>{title}</h2><p>{metric==='sales'?'IDR sesuai basis sumber':metric==='slots'?'Slot unik final':'Bukan orang unik lintas sesi'}</p><div className="canvas-wrap"><canvas ref={ref} role="img" aria-label={`${title}, ${from} sampai ${to}`}/></div>{values.filter(v=>v!=null).length<2&&<small>Butuh minimal 2 tanggal untuk melihat tren</small>}<details><summary>Lihat data grafik</summary><div className="table-wrap"><table><thead><tr><th>Tanggal</th><th>{title}</th></tr></thead><tbody>{paging.items.map(d=><tr key={d}><td>{d}</td><td>{values[days.indexOf(d)]==null?<UnavailableValue reason="Belum ada nilai metrik dari laporan final pada tanggal ini."/>:num(values[days.indexOf(d)])}</td></tr>)}</tbody></table></div><Pagination label="tanggal" total={paging.total} page={paging.page} pageSize={paging.pageSize} onChange={paging.onChange}/></details></section>;
 }

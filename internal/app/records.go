@@ -103,6 +103,12 @@ func (a *App) records(ctx context.Context, u auth.User, f Filter, global bool, f
 		var sourceFlags []string
 		a.DB.QueryRow(ctx, "SELECT COALESCE(er.result->'flags','[]'::jsonb) FROM extraction_runs er JOIN processing_jobs j ON j.id=er.job_id WHERE j.source_report_id=$1 ORDER BY er.created_at DESC LIMIT 1", out[i].SourceID).Scan(&sourceFlags)
 		for _, flag := range sourceFlags {
+			if flag == "SCOPE_MISMATCH" && out[i].Scope == "room" {
+				continue
+			}
+			if flag == "PERIOD_UNCONFIRMED" && out[i].PeriodConfirmed {
+				continue
+			}
 			if flag == "SCOPE_MISMATCH" || flag == "PERIOD_UNCONFIRMED" {
 				out[i].SourceFlags = append(out[i].SourceFlags, flag)
 			}
@@ -254,6 +260,11 @@ func (a *App) summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	summary := reports.Aggregate(rows)
+	if f.Scope == "room" {
+		summary = reports.AggregateRooms(rows)
+		respond(w, 200, map[string]any{"summary": summary, "filter": f, "scope": "private", "is_demo": a.C.Demo})
+		return
+	}
 	history, err := a.formulaHistory(r, f, false)
 	if err != nil {
 		a.err(w, r, 500, "DATABASE", "Riwayat formula tidak terbaca")

@@ -101,4 +101,80 @@ ON CONFLICT(mapping_version,key) DO NOTHING;
 
 INSERT INTO schema_migrations(version) VALUES('005_formula_v21');
 
+-- Migration: 006_screenshot_profiles
+-- New uploads use a separate contract; existing reports retain their mapping.
+INSERT INTO metric_mapping_versions(id,channel_id,label,confirmed,is_demo) VALUES
+('tiktok-screenshot-v1','tiktok','Screenshot TikTok · label asli & formula sumber',true,false),
+('shopee-screenshot-v1','shopee','Screenshot Shopee · label asli & formula sumber',true,false);
+INSERT INTO metric_definitions(mapping_version,key,label,unit,kind,aggregation,required,canonical_column,canonical_confirmed)
+SELECT replace(mapping_version,'source-v1','screenshot-v1'),key,label,unit,kind,aggregation,required,NULL,false
+FROM metric_definitions WHERE mapping_version IN ('tiktok-source-v1','shopee-source-v1');
+INSERT INTO metric_definitions(mapping_version,key,label,unit,kind,aggregation,required,canonical_confirmed)
+SELECT m.id,k.key,k.label,k.unit,k.kind,k.agg,false,false
+FROM metric_mapping_versions m CROSS JOIN (VALUES
+('source_duration_seconds','Durasi LIVE tertulis pada bukti','seconds','duration','source'),
+('source_sales_per_hour','GMV per jam sumber','IDR','money','source'),
+('source_comment_rate','Persentase komentar sumber','ratio','ratio','source'),
+('source_ctor','Pesanan per klik / CTOR sumber','ratio','ratio','source'),
+('source_aov','AOV / Nilai penjualan per pesanan','IDR','money','source')
+) k(key,label,unit,kind,agg)
+WHERE m.id IN ('tiktok-screenshot-v1','shopee-screenshot-v1') ON CONFLICT DO NOTHING;
+UPDATE metric_definitions SET label=CASE
+ WHEN key='sales' AND mapping_version='tiktok-screenshot-v1' THEN 'Perolehan GMV (Indirect internal; bukan LTV terverifikasi)'
+ WHEN key='estimated_sales' THEN 'Perkiraan GMV (Direct internal; atribusi belum terverifikasi)'
+ WHEN key='sales' THEN 'Penjualan · sesuai basis pesanan'
+ WHEN key='views' AND mapping_version='shopee-screenshot-v1' THEN 'Dilihat · bukan impresi terverifikasi'
+ WHEN key='views' THEN 'Tayangan · bukan unique viewers terverifikasi'
+ WHEN key='viewers' THEN 'Penonton · bukan rata-rata concurrent'
+ ELSE label END
+WHERE mapping_version IN ('tiktok-screenshot-v1','shopee-screenshot-v1');
+
+-- Older drafts can still be retried by the updated extractor.
+INSERT INTO metric_definitions(mapping_version,key,label,unit,kind,aggregation,required,canonical_confirmed)
+SELECT m.id,d.key,d.label,d.unit,d.kind,d.aggregation,false,false
+FROM metric_mapping_versions m JOIN metric_definitions d
+ ON d.mapping_version=m.channel_id||'-screenshot-v1'
+WHERE m.id IN ('tiktok-source-v1','shopee-source-v1')
+ AND d.key IN ('source_duration_seconds','source_sales_per_hour','source_comment_rate','source_ctor')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO schema_migrations(version) VALUES('006_screenshot_profiles');
+
+-- Migration: 007_automatic_upload
+ALTER TABLE source_reports ADD COLUMN auto_metadata boolean NOT NULL DEFAULT false;
+
+INSERT INTO schema_migrations(version) VALUES('007_automatic_upload');
+
+-- Migration: 008_upload_intakes
+CREATE TABLE upload_intakes (
+ id text PRIMARY KEY, created_by text NOT NULL REFERENCES users(id),
+ channel text NOT NULL CHECK(channel IN('tiktok','shopee')),
+ mapping_version text NOT NULL REFERENCES metric_mapping_versions(id),
+ status text NOT NULL DEFAULT 'uploaded' CHECK(status IN('uploaded','queued','running','extracted','failed','submitted')),
+ step integer NOT NULL DEFAULT 1 CHECK(step BETWEEN 1 AND 4),
+ revision integer NOT NULL DEFAULT 1, metadata jsonb NOT NULL DEFAULT '{}',
+ result jsonb, corrections jsonb NOT NULL DEFAULT '[]',
+ attempts integer NOT NULL DEFAULT 0, lease_token text, lease_until timestamptz,
+ next_run_at timestamptz NOT NULL DEFAULT now(), last_error text NOT NULL DEFAULT '',
+ idempotency_key text NOT NULL UNIQUE, report_id text REFERENCES report_versions(id),
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX upload_intakes_owner ON upload_intakes(created_by,created_at DESC);
+CREATE INDEX upload_intakes_queue ON upload_intakes(next_run_at) WHERE status IN('queued','running');
+CREATE TABLE intake_attachments (
+ id text PRIMARY KEY, intake_id text NOT NULL REFERENCES upload_intakes(id),
+ original_name text NOT NULL, storage_key text NOT NULL UNIQUE,
+ content_type text NOT NULL CHECK(content_type IN('image/png','image/jpeg')),
+ content_hash text NOT NULL, bytes bigint NOT NULL CHECK(bytes>0)
+);
+-- Host accounts can only upload their own drafts and are explicitly linked by Superadmin.
+INSERT INTO roles(name) VALUES('host');
+INSERT INTO role_permissions(role,permission) VALUES('host','upload_report');
+ALTER TABLE users DROP CONSTRAINT users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK(role IN('superadmin','admin','client','host'));
+ALTER TABLE users ADD COLUMN host_id text REFERENCES hosts(id);
+ALTER TABLE users ADD CONSTRAINT users_host_link CHECK(role<>'host' OR host_id IS NOT NULL);
+
+INSERT INTO schema_migrations(version) VALUES('008_upload_intakes');
+
 COMMIT;

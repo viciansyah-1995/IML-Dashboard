@@ -77,6 +77,7 @@ type Record struct {
 	Metrics           map[string]*string `json:"metrics"`
 }
 type Coverage struct {
+	Scope       string   `json:"scope,omitempty"`
 	Eligible    int      `json:"eligible_slots"`
 	Total       int      `json:"total_slots"`
 	Missing     int      `json:"missing_slots"`
@@ -86,16 +87,17 @@ type Coverage struct {
 	Limitations []string `json:"limitations"`
 }
 type Summary struct {
-	Formula   *FormulaResult      `json:"formula,omitempty"`
-	Metrics   map[string]*string  `json:"metrics"`
-	Coverage  map[string]Coverage `json:"coverage"`
-	Slots     int                 `json:"slots"`
-	RoomCount int                 `json:"room_count"`
-	Hours     string              `json:"hours"`
-	Hosts     int                 `json:"hosts"`
-	Updated   *time.Time          `json:"updated_at"`
-	Revision  string              `json:"revision"`
-	Trend     []Daily             `json:"trend"`
+	Screenshot *ScreenshotResult   `json:"screenshot,omitempty"`
+	Formula    *FormulaResult      `json:"formula,omitempty"`
+	Metrics    map[string]*string  `json:"metrics"`
+	Coverage   map[string]Coverage `json:"coverage"`
+	Slots      int                 `json:"slots"`
+	RoomCount  int                 `json:"room_count"`
+	Hours      string              `json:"hours"`
+	Hosts      int                 `json:"hosts"`
+	Updated    *time.Time          `json:"updated_at"`
+	Revision   string              `json:"revision"`
+	Trend      []Daily             `json:"trend"`
 }
 type Daily struct {
 	Date         string  `json:"date"`
@@ -163,6 +165,9 @@ func Duration(start, end time.Time) (int, error) {
 }
 func Blockers(r Record, defs []Definition) []string {
 	flags := append([]string{}, r.SourceFlags...)
+	if !((r.Channel == "tiktok" && r.Basis == "Pesanan Teratribusi") || (r.Channel == "shopee" && (r.Basis == "Pesanan Dibuat" || r.Basis == "Pesanan Selesai"))) {
+		flags = append(flags, "BASIS_UNCONFIRMED")
+	}
 	if !r.PeriodConfirmed || r.PeriodStart == nil || r.PeriodEnd == nil {
 		flags = append(flags, "PERIOD_UNCONFIRMED")
 	}
@@ -171,6 +176,12 @@ func Blockers(r Record, defs []Definition) []string {
 	}
 	if r.Scope == "host_slot" && (r.PeriodStart == nil || r.PeriodEnd == nil || !r.PeriodStart.Equal(r.Start) || !r.PeriodEnd.Equal(r.End)) {
 		flags = append(flags, "SCOPE_MISMATCH")
+	}
+	if r.PeriodStart != nil && r.PeriodEnd != nil && r.Metrics["source_duration_seconds"] != nil {
+		written, err := decimal.NewFromString(*r.Metrics["source_duration_seconds"])
+		if err != nil || !written.Equal(decimal.NewFromInt(int64(r.PeriodEnd.Sub(*r.PeriodStart).Seconds()))) {
+			flags = append(flags, "SOURCE_DURATION_MISMATCH")
+		}
 	}
 	for _, d := range defs {
 		if d.Required && r.Metrics[d.Key] == nil {
@@ -358,6 +369,7 @@ func Aggregate(rows []Record) Summary {
 		s.Trend = append(s.Trend, Daily{Date: d, Views: Sum(rs, "views"), Interactions: Sum(rs, "interactions"), Sales: Sum(rs, "sales"), Slots: len(rs), Hours: decimal.NewFromInt(int64(sec)).Div(decimal.NewFromInt(3600)).String()})
 	}
 	FormulaAggregate(&s, eligible)
+	s.Screenshot = ScreenshotAggregate(eligible)
 	return s
 }
 

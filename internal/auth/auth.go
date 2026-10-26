@@ -12,6 +12,7 @@ import (
 )
 
 type User struct {
+	HostID        string   `json:"host_id,omitempty"`
 	PhotoURL      string   `json:"photo_url"`
 	ID            string   `json:"id"`
 	Email         string   `json:"email"`

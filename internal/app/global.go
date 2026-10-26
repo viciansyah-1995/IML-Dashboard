@@ -61,6 +61,9 @@ func (a *App) hostResults(w http.ResponseWriter, r *http.Request) ([]leaderboard
 		out = leaderboard.RankHosts(out, metric)
 	}
 	for i := range out {
+		// Source-only screenshot calculations include internal revenue context;
+		// keep them on the authorized brand dashboard/detail endpoints.
+		out[i].Summary.Screenshot = nil
 		out[i].Summary.Revision = auth.Digest(out[i].Summary.Revision)
 		for k, c := range out[i].Summary.Coverage {
 			c.Basis = f.Basis

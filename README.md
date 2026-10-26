@@ -68,3 +68,5 @@ Mode manual berjalan tanpa OpenClaw/SapaGo. Gateway ekstraksi OpenClaw memerluka
 Font Diatype berlisensi tidak disertakan. Gunakan file font yang memiliki izin pemakaian sesuai [panduan aset font](frontend/src/assets/fonts/README.md); aplikasi memakai system fallback jika font belum tersedia.
 
 Repository berisi source, migrasi, fixture sintetis, dan dokumentasi. `.env`, database, backup, upload privat, kredensial, dependensi terpasang, serta build artifact dikecualikan dari Git. Screenshot dokumentasi menggunakan data demo.
+
+Alur upload terbaru: [Screenshot → AI → metadata → review](docs/screenshot-first-upload.md).

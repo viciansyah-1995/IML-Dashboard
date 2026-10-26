@@ -52,7 +52,7 @@ func (a *App) session(next http.Handler) http.Handler {
 			return
 		}
 		var u auth.User
-		e = a.DB.QueryRow(r.Context(), "SELECT u.id,u.email,u.name,u.role,u.access_version,s.csrf_token,CASE WHEN u.photo_version='' THEN '' ELSE '/api/profiles/users/'||u.id||'/photo?v='||u.photo_version END FROM auth_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active", auth.Digest(cookie.Value)).Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.AccessVersion, &u.CSRF, &u.PhotoURL)
+		e = a.DB.QueryRow(r.Context(), "SELECT u.id,u.email,u.name,u.role,u.access_version,s.csrf_token,CASE WHEN u.photo_version='' THEN '' ELSE '/api/profiles/users/'||u.id||'/photo?v='||u.photo_version END,coalesce(u.host_id,'') FROM auth_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active", auth.Digest(cookie.Value)).Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.AccessVersion, &u.CSRF, &u.PhotoURL, &u.HostID)
 		if e != nil {
 			a.err(w, r, 401, "UNAUTHENTICATED", "Sesi berakhir atau akses dicabut")
 			return

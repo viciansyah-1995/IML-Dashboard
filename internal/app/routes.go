@@ -29,10 +29,16 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		a.mutateMaster(w, r, parts)
 	case path == "reports/summary" && r.Method == "GET":
 		a.summary(w, r)
+	case path == "reports/filter-options" && r.Method == "GET":
+		a.filterOptions(w, r, false)
+	case path == "global/filter-options" && r.Method == "GET":
+		a.filterOptions(w, r, true)
 	case path == "reports/export" && r.Method == "GET":
 		a.export(w, r, false)
 	case path == "sessions" && r.Method == "GET":
 		a.listReports(w, r)
+	case parts[0] == "upload-intakes":
+		a.intakeAPI(w, r, parts)
 	case path == "uploads" && r.Method == "POST":
 		a.upload(w, r)
 	case len(parts) >= 2 && parts[0] == "reports":

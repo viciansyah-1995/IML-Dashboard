@@ -36,7 +36,7 @@ func TestDurationAndScope(t *testing.T) {
 	if err != nil || d != 7200 {
 		t.Fatal(d, err)
 	}
-	r := Record{Scope: "host_slot", Start: s, End: e, PeriodStart: &s, PeriodEnd: &e, PeriodConfirmed: true, Metrics: map[string]*string{}}
+	r := Record{Channel: "tiktok", Basis: "Pesanan Teratribusi", Scope: "host_slot", Start: s, End: e, PeriodStart: &s, PeriodEnd: &e, PeriodConfirmed: true, Metrics: map[string]*string{}}
 	if len(Blockers(r, nil)) != 0 {
 		t.Fatal("valid period blocked")
 	}

@@ -68,6 +68,10 @@ func (a *App) internal(w http.ResponseWriter, r *http.Request) {
 		a.err(w, r, 401, "MACHINE_AUTH", "Machine credential tidak valid")
 		return
 	}
+	if strings.HasPrefix(r.URL.Path, "/internal/intakes/") {
+		a.intakeInternal(w, r)
+		return
+	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/internal/jobs/"), "/")
 	if len(parts) == 1 && parts[0] == "claim" && r.Method == "POST" {
 		a.claim(w, r)
@@ -170,7 +174,8 @@ func (a *App) internal(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 	var mapping, scope, creator string
 	var currentRev int
-	e = tx.QueryRow(r.Context(), "SELECT definition_version,scope,revision,created_by FROM source_reports WHERE id=$1 FOR UPDATE", source).Scan(&mapping, &scope, &currentRev, &creator)
+	var autoMetadata bool
+	e = tx.QueryRow(r.Context(), "SELECT definition_version,scope,revision,created_by,auto_metadata FROM source_reports WHERE id=$1 FOR UPDATE", source).Scan(&mapping, &scope, &currentRev, &creator, &autoMetadata)
 	var lease string
 	if e == nil {
 		e = tx.QueryRow(r.Context(), "SELECT lease_token FROM processing_jobs WHERE id=$1 AND status='running' AND lease_until>now() FOR UPDATE", id).Scan(&lease)
@@ -193,6 +198,16 @@ func (a *App) internal(w http.ResponseWriter, r *http.Request) {
 		a.err(w, r, 400, "SCHEMA", "Cakupan hasil tidak valid")
 		return
 	}
+	var slotStart, slotEnd time.Time
+	var expectedBasis string
+	if err := tx.QueryRow(r.Context(), "SELECT h.start_at,h.end_at,s.basis FROM source_reports s JOIN host_slots h ON h.id=s.slot_id WHERE s.id=$1", source).Scan(&slotStart, &slotEnd, &expectedBasis); err != nil {
+		a.err(w, r, 500, "DATABASE", "Konteks periode tidak terbaca")
+		return
+	}
+	if err := extraction.CheckObservation(&out, slotStart, slotEnd, scope, expectedBasis); err != nil {
+		a.err(w, r, 400, "SCHEMA", err.Error())
+		return
+	}
 	for _, flag := range out.Flags {
 		if flag == "CONFLICT" || flag == "LOW_READABILITY" {
 			for i := range values {
@@ -204,7 +219,7 @@ func (a *App) internal(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if out.ObservedScope != scope {
+	if !autoMetadata && out.ObservedScope != scope {
 		out.Flags = append(out.Flags, "SCOPE_MISMATCH")
 	}
 	if !out.PeriodReadable {
@@ -226,6 +241,24 @@ func (a *App) internal(w http.ResponseWriter, r *http.Request) {
 	} else {
 		var version string
 		e = tx.QueryRow(r.Context(), "SELECT id FROM report_versions WHERE source_report_id=$1 AND status IN('draft','review') ORDER BY number DESC LIMIT 1 FOR UPDATE", source).Scan(&version)
+		if e == nil && autoMetadata {
+			var channel, slotID, roomID string
+			e = tx.QueryRow(r.Context(), "SELECT h.id,h.room_id,lr.channel_id FROM source_reports s JOIN host_slots h ON h.id=s.slot_id JOIN live_rooms lr ON lr.id=h.room_id WHERE s.id=$1", source).Scan(&slotID, &roomID, &channel)
+			if e == nil {
+				proposed := automaticObservation(out, channel, slotStart, slotEnd)
+				subject := roomID
+				if proposed.Scope == "host_slot" {
+					subject = slotID
+				}
+				_, e = tx.Exec(r.Context(), "SELECT pg_advisory_xact_lock(hashtext($1))", subject+proposed.Scope+proposed.Basis)
+				if e == nil {
+					_, e = tx.Exec(r.Context(), "UPDATE source_reports SET period_start=$2,period_end=$3,period_confirmed=$4,basis=$5,scope=$6 WHERE id=$1", source, proposed.Start, proposed.End, proposed.Confirmed, proposed.Basis, proposed.Scope)
+				}
+				if e == nil {
+					_, e = tx.Exec(r.Context(), "UPDATE report_versions SET subject_key=$2,basis=$3,scope=$4 WHERE id=$1", version, subject, proposed.Basis, proposed.Scope)
+				}
+			}
+		}
 		if e == nil {
 			_, e = tx.Exec(r.Context(), "DELETE FROM report_metric_values WHERE version_id=$1", version)
 			for _, v := range values {
@@ -285,9 +318,10 @@ func (a *App) claim(w http.ResponseWriter, r *http.Request) {
 	}
 	lease := auth.Token()
 	_, e = tx.Exec(r.Context(), "UPDATE processing_jobs SET status='running',attempts=attempts+1,lease_token=$2,lease_until=now()+$3*interval '1 second',worker_id=$4,updated_at=now() WHERE id=$1", id, lease, int(a.C.Lease.Seconds()), in.WorkerID)
-	var channel, scope string
+	var channel, scope, mapping string
+	var operator extraction.OperatorContext
 	if e == nil {
-		e = tx.QueryRow(r.Context(), "SELECT lr.channel_id,s.scope FROM source_reports s JOIN live_rooms lr ON lr.id=s.room_id WHERE s.id=$1", source).Scan(&channel, &scope)
+		e = tx.QueryRow(r.Context(), "SELECT lr.channel_id,s.scope,s.definition_version,h.business_date::text,h.start_at::text,h.end_at::text,b.name,ho.name,st.name,h.id_line,s.basis FROM source_reports s JOIN live_rooms lr ON lr.id=s.room_id JOIN host_slots h ON h.id=s.slot_id JOIN brands b ON b.id=h.brand_id JOIN hosts ho ON ho.id=h.host_id JOIN studios st ON st.id=h.studio_id WHERE s.id=$1", source).Scan(&channel, &scope, &mapping, &operator.Date, &operator.Start, &operator.End, &operator.Brand, &operator.Host, &operator.Studio, &operator.IDLine, &operator.Basis)
 	}
 	if e == nil {
 		e = tx.Commit(r.Context())
@@ -301,5 +335,14 @@ func (a *App) claim(w http.ResponseWriter, r *http.Request) {
 		a.err(w, r, 500, "DATABASE", "Bukti tidak tersedia")
 		return
 	}
-	respond(w, 200, map[string]any{"job_id": id, "mode": mode, "scenario": scenario, "attempt": attempt + 1, "lease_token": lease, "channel": channel, "scope": scope, "attachments": files, "lease_seconds": int(a.C.Lease.Seconds())})
+	defs, err := a.defs(r.Context(), mapping)
+	if err != nil {
+		a.err(w, r, 500, "DATABASE", "Mapping tidak terbaca")
+		return
+	}
+	keys := []string{}
+	for _, d := range defs {
+		keys = append(keys, d.Key)
+	}
+	respond(w, 200, map[string]any{"job_id": id, "mode": mode, "scenario": scenario, "attempt": attempt + 1, "lease_token": lease, "channel": channel, "scope": scope, "attachments": files, "lease_seconds": int(a.C.Lease.Seconds()), "operator": operator, "metric_keys": keys})
 }

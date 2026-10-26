@@ -24,15 +24,18 @@ type Worker struct {
 	HTTP            *http.Client
 }
 type Claim struct {
-	JobID        string                  `json:"job_id"`
-	Mode         string                  `json:"mode"`
-	Scenario     string                  `json:"scenario"`
-	Attempt      int                     `json:"attempt"`
-	Lease        string                  `json:"lease_token"`
-	Channel      string                  `json:"channel"`
-	Scope        string                  `json:"scope"`
-	Attachments  []extraction.Attachment `json:"attachments"`
-	LeaseSeconds int                     `json:"lease_seconds"`
+	Resource     string                     `json:"resource"`
+	MetricKeys   []string                   `json:"metric_keys"`
+	Operator     extraction.OperatorContext `json:"operator"`
+	JobID        string                     `json:"job_id"`
+	Mode         string                     `json:"mode"`
+	Scenario     string                     `json:"scenario"`
+	Attempt      int                        `json:"attempt"`
+	Lease        string                     `json:"lease_token"`
+	Channel      string                     `json:"channel"`
+	Scope        string                     `json:"scope"`
+	Attachments  []extraction.Attachment    `json:"attachments"`
+	LeaseSeconds int                        `json:"lease_seconds"`
 }
 
 func (w Worker) request(ctx context.Context, method, path, lease string, payload any) ([]byte, int, error) {
@@ -100,6 +103,9 @@ func main() {
 			defer wg.Done()
 			for ctx.Err() == nil {
 				b, status, e := w.request(ctx, "POST", "/internal/jobs/claim", "", map[string]string{"worker_id": w.ID})
+				if e == nil && status == 204 {
+					b, status, e = w.request(ctx, "POST", "/internal/intakes/claim", "", map[string]string{"worker_id": w.ID})
+				}
 				if e != nil {
 					slog.Warn("claim failed", "error", e)
 				} else if status != 204 {
@@ -120,6 +126,10 @@ func main() {
 	wg.Wait()
 }
 func (w Worker) process(ctx context.Context, c Claim, timeout time.Duration) {
+	prefix := "/internal/jobs/"
+	if c.Resource == "intakes" {
+		prefix = "/internal/intakes/"
+	}
 	jobctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	done := make(chan struct{})
@@ -133,7 +143,7 @@ func (w Worker) process(ctx context.Context, c Claim, timeout time.Duration) {
 			case <-jobctx.Done():
 				return
 			case <-tick.C:
-				if _, _, e := w.request(jobctx, "POST", "/internal/jobs/"+c.JobID+"/heartbeat", c.Lease, map[string]string{}); e != nil {
+				if _, _, e := w.request(jobctx, "POST", prefix+c.JobID+"/heartbeat", c.Lease, map[string]string{}); e != nil {
 					cancel()
 					return
 				}
@@ -141,10 +151,10 @@ func (w Worker) process(ctx context.Context, c Claim, timeout time.Duration) {
 		}
 	}()
 	defer close(done)
-	in := extraction.Input{JobID: c.JobID, Channel: c.Channel, Scope: c.Scope, Scenario: c.Scenario, Attempt: c.Attempt, Attachments: c.Attachments}
+	in := extraction.Input{MetricKeys: c.MetricKeys, Operator: c.Operator, JobID: c.JobID, Channel: c.Channel, Scope: c.Scope, Scenario: c.Scenario, Attempt: c.Attempt, Attachments: c.Attachments}
 	var err error
 	for i := range in.Attachments {
-		b, _, e := w.request(jobctx, "GET", "/internal/jobs/"+c.JobID+"/attachments/"+in.Attachments[i].ID, c.Lease, nil)
+		b, _, e := w.request(jobctx, "GET", prefix+c.JobID+"/attachments/"+in.Attachments[i].ID, c.Lease, nil)
 		if e != nil {
 			err = e
 			break
@@ -165,11 +175,11 @@ func (w Worker) process(ctx context.Context, c Claim, timeout time.Duration) {
 		out, err = extractor.Extract(jobctx, in)
 	}
 	if err == nil {
-		_, _, err = w.request(jobctx, "POST", "/internal/jobs/"+c.JobID+"/result", c.Lease, out)
+		_, _, err = w.request(jobctx, "POST", prefix+c.JobID+"/result", c.Lease, out)
 	}
 	if err != nil {
 		message := err.Error()
-		w.request(ctx, "POST", "/internal/jobs/"+c.JobID+"/failure", c.Lease, map[string]any{"message": message, "transient": strings.HasPrefix(message, "transient:")})
+		w.request(ctx, "POST", prefix+c.JobID+"/failure", c.Lease, map[string]any{"message": message, "transient": strings.HasPrefix(message, "transient:")})
 		slog.Warn("job failed", "job_id", c.JobID, "error_class", strings.Split(message, ":")[0])
 		return
 	}

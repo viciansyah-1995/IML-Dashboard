@@ -37,7 +37,7 @@ func (a *App) users(w http.ResponseWriter, r *http.Request, parts []string) {
 		}
 		pg := pagination(r, total)
 		args = append(args, pg.Size, pg.Offset)
-		rows, e := a.DB.Query(r.Context(), "SELECT target.id,target.email,target.name,target.role,target.active,target.access_version,target.joined_on::text,CASE WHEN target.photo_version='' THEN '' ELSE '/api/profiles/users/'||target.id||'/photo?v='||target.photo_version END,ARRAY(SELECT brand_id FROM user_brand_access WHERE user_id=target.id ORDER BY brand_id),ARRAY(SELECT studio_id FROM studio_access WHERE user_id=target.id ORDER BY studio_id) "+base+" ORDER BY target.name,target.id LIMIT $3 OFFSET $4", args...)
+		rows, e := a.DB.Query(r.Context(), "SELECT target.id,target.email,target.name,target.role,target.active,target.access_version,target.joined_on::text,coalesce(target.host_id,''),CASE WHEN target.photo_version='' THEN '' ELSE '/api/profiles/users/'||target.id||'/photo?v='||target.photo_version END,ARRAY(SELECT brand_id FROM user_brand_access WHERE user_id=target.id ORDER BY brand_id),ARRAY(SELECT studio_id FROM studio_access WHERE user_id=target.id ORDER BY studio_id) "+base+" ORDER BY target.name,target.id LIMIT $3 OFFSET $4", args...)
 
 		if e != nil {
 			a.err(w, r, 500, "DATABASE", "Gagal")
@@ -46,15 +46,15 @@ func (a *App) users(w http.ResponseWriter, r *http.Request, parts []string) {
 		defer rows.Close()
 		out := []map[string]any{}
 		for rows.Next() {
-			var id, email, name, role, joined, photoURL string
+			var id, email, name, role, joined, hostID, photoURL string
 			var brands, studios []string
 			var active bool
 			var version int
-			if e := rows.Scan(&id, &email, &name, &role, &active, &version, &joined, &photoURL, &brands, &studios); e != nil {
+			if e := rows.Scan(&id, &email, &name, &role, &active, &version, &joined, &hostID, &photoURL, &brands, &studios); e != nil {
 				a.err(w, r, 500, "DATABASE", "Data pengguna belum dapat dimuat.")
 				return
 			}
-			out = append(out, map[string]any{"id": id, "email": email, "name": name, "role": role, "active": active, "access_version": version, "joined_on": joined, "photo_url": photoURL, "brand_ids": brands, "studio_ids": studios})
+			out = append(out, map[string]any{"id": id, "email": email, "name": name, "role": role, "active": active, "access_version": version, "joined_on": joined, "host_id": hostID, "photo_url": photoURL, "brand_ids": brands, "studio_ids": studios})
 		}
 		if rows.Err() != nil {
 			a.err(w, r, 500, "DATABASE", "Daftar pengguna belum selesai dimuat. Coba lagi.")
@@ -64,6 +64,7 @@ func (a *App) users(w http.ResponseWriter, r *http.Request, parts []string) {
 		return
 	}
 	var in struct {
+		HostID      string   `json:"host_id"`
 		Joined      string   `json:"joined_on"`
 		RemovePhoto bool     `json:"remove_photo"`
 		ID          string   `json:"id"`
@@ -121,7 +122,7 @@ func (a *App) users(w http.ResponseWriter, r *http.Request, parts []string) {
 		a.err(w, r, 404, "NOT_FOUND", "User tidak ditemukan")
 		return
 	}
-	if in.Role != "client" && in.Role != "admin" && in.Role != "superadmin" && in.Action == "" {
+	if in.Role != "client" && in.Role != "admin" && in.Role != "superadmin" && in.Role != "host" && in.Action == "" {
 		a.err(w, r, 400, "ROLE", "Role tidak valid")
 		return
 	}
@@ -138,6 +139,20 @@ func (a *App) users(w http.ResponseWriter, r *http.Request, parts []string) {
 	if u.Role != "superadmin" && len(in.Studios) > 0 {
 		a.err(w, r, 403, "FORBIDDEN", "Assignment studio hanya oleh Superadmin")
 		return
+	}
+	if in.Action == "" && in.Role == "host" {
+		if len(in.Studios) == 0 {
+			a.err(w, r, 400, "ASSIGNMENT", "Pilih minimal satu studio untuk akun Host")
+			return
+		}
+		var valid bool
+		e := a.DB.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM hosts WHERE id=$1 AND active) AND NOT EXISTS(SELECT 1 FROM unnest($2::text[]) b WHERE NOT EXISTS(SELECT 1 FROM host_brand_access ha WHERE ha.host_id=$1 AND ha.brand_id=b))", in.HostID, in.Brands).Scan(&valid)
+		if e != nil || !valid {
+			a.err(w, r, 400, "HOST", "Pilih profil host aktif dengan assignment brand yang sesuai")
+			return
+		}
+	} else if in.Action == "" {
+		in.HostID = ""
 	}
 	tx, e := a.DB.Begin(r.Context())
 	if e != nil {
@@ -169,9 +184,9 @@ func (a *App) users(w http.ResponseWriter, r *http.Request, parts []string) {
 		in.Email = strings.ToLower(strings.TrimSpace(in.Email))
 		if id == "" {
 			id = auth.ID()
-			_, e = tx.Exec(r.Context(), "INSERT INTO users(id,email,name,password_hash,role,active,joined_on) VALUES($1,$2,$3,$4,$5,$6,$7::date)", id, in.Email, in.Name, auth.Hash(auth.Token()), in.Role, in.Active, in.Joined)
+			_, e = tx.Exec(r.Context(), "INSERT INTO users(id,email,name,password_hash,role,active,joined_on,host_id) VALUES($1,$2,$3,$4,$5,$6,$7::date,NULLIF($8,''))", id, in.Email, in.Name, auth.Hash(auth.Token()), in.Role, in.Active, in.Joined, in.HostID)
 		} else {
-			_, e = tx.Exec(r.Context(), "UPDATE users SET email=$2,name=$3,role=$4,active=$5,joined_on=$6::date,access_version=access_version+1 WHERE id=$1", id, in.Email, in.Name, in.Role, in.Active, in.Joined)
+			_, e = tx.Exec(r.Context(), "UPDATE users SET email=$2,name=$3,role=$4,active=$5,joined_on=$6::date,host_id=NULLIF($7,''),access_version=access_version+1 WHERE id=$1", id, in.Email, in.Name, in.Role, in.Active, in.Joined, in.HostID)
 		}
 		if e == nil {
 			e = photo.save(r, tx, "users", id, in.RemovePhoto)

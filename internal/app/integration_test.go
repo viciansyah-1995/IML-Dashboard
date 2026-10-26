@@ -87,13 +87,20 @@ func detail(t *testing.T, c client, id string) reports.Record {
 	json.Unmarshal(b, &d)
 	return d.Report
 }
-func uploadTest(t *testing.T, c client, mode, scenario, scope, key string, periodMismatch bool) (int, string) {
+func uploadTest(t *testing.T, c client, mode, scenario, scope, key string, periodMismatch bool, automatic ...bool) (int, string) {
 	metadata := Upload{Brand: "demo-brand-a", Account: "demo-brand-a-tiktok", Studio: "studio-1", Host: "demo-host-6", Channel: "tiktok", Start: time.Date(2026, 10, 11, 8, 0, 0, 0, time.FixedZone("WIB", 7*3600)), End: time.Date(2026, 10, 11, 10, 0, 0, 0, time.FixedZone("WIB", 7*3600)), Scope: scope, PeriodConfirmed: true, Basis: "Pesanan Teratribusi", Definition: "tiktok-demo-v1", Mode: mode, Scenario: scenario}
 	metadata.PeriodStart = &metadata.Start
 	metadata.PeriodEnd = &metadata.End
 	if periodMismatch {
 		before := metadata.Start.Add(-10 * time.Hour)
 		metadata.PeriodStart = &before
+	}
+	if len(automatic) > 0 && automatic[0] {
+		metadata.AutoMetadata = true
+		metadata.Channel = "shopee"
+		metadata.Account = "demo-brand-a-shopee"
+		metadata.Basis = "Pesanan Selesai" // ignored until screenshot evidence or review
+		metadata.Definition = "invalid-client-choice"
 	}
 	var body bytes.Buffer
 	form := multipart.NewWriter(&body)
@@ -186,6 +193,32 @@ func TestPostgresWorkflow(t *testing.T) {
 	ca := login(t, server.URL, "client.a@iml.local", password["client.a@iml.local"])
 	cb := login(t, server.URL, "client.b@iml.local", password["client.b@iml.local"])
 	super := login(t, server.URL, "superadmin@iml.local", password["superadmin@iml.local"])
+	t.Run("filter options respect report availability and ACL", func(t *testing.T) {
+		code, b := ca.req("GET", "/api/reports/filter-options?"+q+"&brand_id=demo-brand-a", nil)
+		var options struct {
+			Items []filterOption `json:"items"`
+		}
+		if code != 200 || json.Unmarshal(b, &options) != nil || len(options.Items) == 0 {
+			t.Fatal(code, string(b))
+		}
+		for _, x := range options.Items {
+			if x.Definition != "tiktok-demo-v1" || x.Scope != "host_slot" {
+				t.Fatal("unexpected unpublished options", x)
+			}
+		}
+		if status, _ := cb.req("GET", "/api/reports/filter-options?"+q+"&brand_id=demo-brand-a", nil); status != 404 {
+			t.Fatal("cross-brand options exposed", status)
+		}
+		code, b = ca.req("GET", "/api/global/filter-options?"+q, nil)
+		if code != 200 {
+			t.Fatal(code, string(b))
+		}
+		for _, private := range []string{"studio_id", "host_id", "brand_id", "id_line"} {
+			if strings.Contains(string(b), private) {
+				t.Fatal("global filter metadata leak", private)
+			}
+		}
+	})
 	t.Run("private ACL and global allowlist", func(t *testing.T) {
 		if code, _ := ca.req("GET", "/api/reports/demo-version-1", nil); code != 404 {
 			t.Fatal("brand B report exposed", code)
@@ -454,6 +487,10 @@ func TestPostgresWorkflow(t *testing.T) {
 		job := claimMachine(t, server.URL)
 		if job["job_id"] == nil {
 			t.Fatal("no persistent claim")
+		}
+		operator, ok := job["operator"].(map[string]any)
+		if !ok || operator["host"] == "" || operator["id_line"] == "" || operator["start_at"] == "" || operator["basis"] != "Pesanan Teratribusi" {
+			t.Fatal("worker missing operator context", operator)
 		}
 		jid := job["job_id"].(string)
 		lease := job["lease_token"].(string)
@@ -887,6 +924,83 @@ func TestPostgresWorkflow(t *testing.T) {
 		if code, _ := ca.req("GET", "/api/global/hosts?"+q, nil); code != 401 {
 			t.Fatal("inactive client global access")
 		}
+	})
+	t.Run("automatic upload defers Shopee metadata and accepts evidence from worker", func(t *testing.T) {
+		code, id := uploadTest(t, super, "mock", "valid_slot", "host_slot", "automatic-shopee", false, true)
+		if code != 201 {
+			t.Fatal(code)
+		}
+		rec := detail(t, super, id)
+		if rec.Definition != "shopee-screenshot-v1" || rec.PeriodStart != nil || rec.PeriodConfirmed || rec.Basis != "Belum terbaca" || rec.Scope != "room" {
+			t.Fatal("automatic defaults", rec)
+		}
+		claim := claimMachine(t, server.URL)
+		jid, lease := claim["job_id"].(string), claim["lease_token"].(string)
+		out := extraction.Output{ObservedScope: "room", PeriodReadable: true, Values: []reports.Value{}, Flags: []string{}, Observation: &extraction.Observation{PeriodStart: rec.Start.Add(-time.Hour).Format(time.RFC3339), PeriodEnd: rec.End.Format(time.RFC3339), Basis: "Pesanan Selesai", Evidence: "Synthetic screenshot period and order filter"}}
+		status, raw := machine(t, server.URL, "POST", "/internal/jobs/"+jid+"/result", lease, out)
+		if status != 200 {
+			t.Fatal(status, string(raw))
+		}
+		rec = detail(t, super, id)
+		if rec.Basis != "Pesanan Selesai" || !rec.PeriodConfirmed || rec.PeriodStart == nil || rec.Scope != "room" {
+			t.Fatal("observation not adopted", rec)
+		}
+		input := reviewValues(t, super, id, "2000")
+		input.Basis = "Pesanan Dibuat"
+		input.Scope = "host_slot"
+		input.Period = &ReviewPeriod{Start: &rec.Start, End: &rec.End, Confirmed: true}
+		if status, raw := super.req("POST", "/api/reports/"+id+"/review", input); status != 200 {
+			t.Fatal(status, string(raw))
+		}
+		rec = detail(t, super, id)
+		if rec.Basis != "Pesanan Dibuat" || rec.Scope != "host_slot" {
+			t.Fatal("review correction failed", rec)
+		}
+	})
+	t.Run("screenshot profile review period and source calculation API", func(t *testing.T) {
+		var profiles int
+		p.QueryRow(ctx, "SELECT count(*) FROM metric_mapping_versions WHERE id IN ('tiktok-screenshot-v1','shopee-screenshot-v1') AND confirmed AND NOT is_demo").Scan(&profiles)
+		if profiles != 2 {
+			t.Fatal("missing screenshot mappings", profiles)
+		}
+		code, id := uploadTest(t, super, "manual", "", "host_slot", "screenshot-profile", false)
+		if code != 201 {
+			t.Fatal(code)
+		}
+		rec := detail(t, super, id)
+		if _, err := p.Exec(ctx, "UPDATE source_reports SET definition_version='tiktok-screenshot-v1' WHERE id=$1", rec.SourceID); err != nil {
+			t.Fatal(err)
+		}
+		p.Exec(ctx, "UPDATE report_versions SET definition_version='tiktok-screenshot-v1' WHERE id=$1", id)
+		input := reviewValues(t, super, id, "10150228")
+		end := rec.End.Add(16 * time.Second)
+		input.Period = &ReviewPeriod{Start: &rec.Start, End: &end, Confirmed: true}
+		attachment := input.Values[0].AttachmentID
+		for k, v := range map[string]string{"source_duration_seconds": "7216", "watch_duration": "43", "estimated_sales": "8950000", "product_clicks": "2330", "impressions": "91020"} {
+			v := v
+			input.Values = append(input.Values, reports.Value{Key: k, Value: &v, Evidence: "Synthetic screenshot fixture " + v, AttachmentID: attachment, Flags: []string{}})
+		}
+		if code, b := super.req("POST", "/api/reports/"+id+"/review", input); code != 200 {
+			t.Fatal(code, string(b))
+		}
+		code, b := super.req("GET", "/api/reports/"+id, nil)
+		var out struct {
+			Report     reports.Record           `json:"report"`
+			Screenshot reports.ScreenshotResult `json:"screenshot"`
+			Blockers   []string                 `json:"blockers"`
+		}
+		if code != 200 || json.Unmarshal(b, &out) != nil || len(out.Screenshot.Metrics) == 0 {
+			t.Fatal(code, string(b))
+		}
+		if out.Report.PeriodEnd == nil || !out.Report.PeriodEnd.Equal(end) || !strings.Contains(strings.Join(out.Blockers, ","), "SCOPE_MISMATCH") {
+			t.Fatal("source period must not change host attribution", out)
+		}
+		if out.Report.Metrics["direct_gmv"] != nil || out.Report.Metrics["unique_viewers"] != nil {
+			t.Fatal("canonical values fabricated")
+		}
+	})
+	t.Run("screenshot-first intake workflow", func(t *testing.T) {
+		testIntakeWorkflow(t, a, admin, super)
 	})
 	_ = p
 }

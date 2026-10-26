@@ -15,6 +15,9 @@ func (a *App) masters(w http.ResponseWriter, r *http.Request) {
  CASE WHEN $3 THEN h.full_name ELSE '' END AS full_name,CASE WHEN $3 THEN h.email ELSE '' END AS email,CASE WHEN $3 THEN h.birth_date::text ELSE NULL END AS birth_date,CASE WHEN $3 THEN h.gender ELSE '' END AS gender,CASE WHEN $3 THEN h.joined_on::text ELSE NULL END AS joined_on,CASE WHEN $3 THEN h.city ELSE '' END AS city,CASE WHEN $3 THEN h.languages ELSE '' END AS languages,CASE WHEN $3 THEN h.specialties ELSE '' END AS specialties,ARRAY(SELECT brand_id FROM host_brand_access WHERE host_id=h.id AND ($1 OR EXISTS(SELECT 1 FROM user_brand_access WHERE user_id=$2 AND brand_id=host_brand_access.brand_id)) ORDER BY brand_id) AS brand_ids
  FROM hosts h WHERE $1 OR EXISTS(SELECT 1 FROM host_brand_access ha JOIN user_brand_access ua ON ua.brand_id=ha.brand_id WHERE ha.host_id=h.id AND ua.user_id=$2) ORDER BY h.name`, "mappings": "SELECT id,label,channel_id,is_demo,confirmed FROM metric_mapping_versions WHERE NOT is_demo OR $3"}
 	for name, q := range queries {
+		if u.Role == "host" && name == "hosts" {
+			q = strings.Replace(q, "ORDER BY h.name", "AND h.id=(SELECT host_id FROM users WHERE id=$2) ORDER BY h.name", 1)
+		}
 		args := []any{}
 		if strings.Contains(q, "$1") {
 			args = []any{u.Role == "superadmin", u.ID}
