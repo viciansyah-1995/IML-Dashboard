@@ -143,7 +143,7 @@ func (a *App) insight(w http.ResponseWriter, r *http.Request) {
 		revision = auth.Digest(strings.Join(markers, ":"))
 	} else {
 		var ok bool
-		f, ok = a.getFilter(w, r, false)
+		f, ok = a.getFilter(w, r, false, false)
 		if !ok {
 			return
 		}

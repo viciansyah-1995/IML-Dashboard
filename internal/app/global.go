@@ -12,7 +12,7 @@ func (a *App) hostResults(w http.ResponseWriter, r *http.Request) ([]leaderboard
 	if !a.permission(w, r, "read_global_host_summary") {
 		return nil, Filter{}, false
 	}
-	f, ok := a.getFilter(w, r, true)
+	f, ok := a.getFilter(w, r, true, false)
 	if !ok {
 		return nil, f, false
 	}

@@ -51,7 +51,7 @@ func (a *App) export(w http.ResponseWriter, r *http.Request, global bool) {
 			versions = append(versions, h.Summary.Revision)
 		}
 	} else {
-		f, ok = a.getFilter(w, r, false)
+		f, ok = a.getFilter(w, r, false, false)
 		if !ok {
 			return
 		}

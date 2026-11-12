@@ -934,6 +934,38 @@ func TestPostgresWorkflow(t *testing.T) {
 		if rec.Definition != "shopee-screenshot-v1" || rec.PeriodStart != nil || rec.PeriodConfirmed || rec.Basis != "Belum terbaca" || rec.Scope != "room" {
 			t.Fatal("automatic defaults", rec)
 		}
+		query := "date_from=2026-10-11&date_to=2026-10-11&brand_id=demo-brand-a&channel=shopee&scope=room&basis=Belum+terbaca"
+		optionsPath := "/api/reports/filter-options?" + query + "&include_drafts=1"
+		code, body := admin.req("GET", optionsPath, nil)
+		var options struct {
+			Items []filterOption `json:"items"`
+		}
+		if code != 200 || json.Unmarshal(body, &options) != nil {
+			t.Fatal(code, string(body))
+		}
+		found := false
+		for _, item := range options.Items {
+			found = found || item.Basis == rec.Basis && item.Scope == rec.Scope && item.Definition == rec.Definition
+		}
+		if !found {
+			t.Fatal("unread basis missing from review filter options")
+		}
+		listPath := "/api/sessions?" + query
+		code, body = admin.req("GET", listPath+"&include_drafts=1&search="+url.QueryEscape(rec.IDLine), nil)
+		var list struct {
+			Items []reports.Record `json:"items"`
+		}
+		if code != 200 || json.Unmarshal(body, &list) != nil || len(list.Items) != 1 || list.Items[0].ID != id {
+			t.Fatal(code, string(body))
+		}
+		if code, _ := admin.req("GET", listPath+"&status=published", nil); code != 400 {
+			t.Fatal("published session filter accepted unread basis", code)
+		}
+		clientB := login(t, server.URL, "client.b@iml.local", "integration-password-123")
+		if code, _ := clientB.req("GET", listPath+"&include_drafts=1", nil); code != 400 {
+			t.Fatal("client filter accepted unread basis", code)
+		}
+
 		claim := claimMachine(t, server.URL)
 		jid, lease := claim["job_id"].(string), claim["lease_token"].(string)
 		out := extraction.Output{ObservedScope: "room", PeriodReadable: true, Values: []reports.Value{}, Flags: []string{}, Observation: &extraction.Observation{PeriodStart: rec.Start.Add(-time.Hour).Format(time.RFC3339), PeriodEnd: rec.End.Format(time.RFC3339), Basis: "Pesanan Selesai", Evidence: "Synthetic screenshot period and order filter"}}

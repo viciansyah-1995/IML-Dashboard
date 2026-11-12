@@ -20,11 +20,12 @@ func (a *App) filterOptions(w http.ResponseWriter, r *http.Request, global bool)
 	if !a.permission(w, r, permission) {
 		return
 	}
-	f, ok := a.getFilter(w, r, global)
+	includeDrafts := !global && canFilterDrafts(r)
+	f, ok := a.getFilter(w, r, global, includeDrafts)
 	if !ok {
 		return
 	}
-	final := global || !user(r).Can("review_report") || r.URL.Query().Get("include_drafts") != "1"
+	final := !includeDrafts
 	rows, err := a.DB.Query(r.Context(), `SELECT DISTINCT s.scope,s.basis,s.definition_version,
  CASE WHEN $1 THEN '' ELSE h.studio_id END, CASE WHEN $1 THEN '' ELSE h.host_id END
  FROM report_versions v JOIN source_reports s ON s.id=v.source_report_id

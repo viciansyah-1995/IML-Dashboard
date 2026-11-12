@@ -26,7 +26,7 @@ type Filter struct {
 	Scope      string `json:"scope"`
 }
 
-func filters(r *http.Request, global bool) (Filter, error) {
+func filters(r *http.Request, global, allowUnreadBasis bool) (Filter, error) {
 	q := r.URL.Query()
 	f := Filter{Definition: q.Get("definition_version"), From: q.Get("date_from"), To: q.Get("date_to"), Brand: q.Get("brand_id"), Channel: q.Get("channel"), Basis: q.Get("basis"), Currency: q.Get("currency"), Host: q.Get("host_id"), Studio: q.Get("studio_id"), Scope: q.Get("scope")}
 	if global && (q.Has("brand_id") || q.Has("group_by") || q.Has("studio_id")) {
@@ -56,7 +56,9 @@ func filters(r *http.Request, global bool) (Filter, error) {
 			f.Basis = "Pesanan Teratribusi"
 		}
 	}
-	if f.Channel == "tiktok" && f.Basis != "Pesanan Teratribusi" || f.Channel == "shopee" && f.Basis != "Pesanan Dibuat" && f.Basis != "Pesanan Selesai" {
+	supportedBasis := f.Channel == "tiktok" && f.Basis == "Pesanan Teratribusi" ||
+		f.Channel == "shopee" && (f.Basis == "Pesanan Dibuat" || f.Basis == "Pesanan Selesai")
+	if !supportedBasis && !(allowUnreadBasis && f.Basis == "Belum terbaca") {
 		return f, fmt.Errorf("basis tidak didukung")
 	}
 	if f.Currency == "" {
@@ -163,8 +165,12 @@ func (a *App) defs(ctx context.Context, mapping string) ([]reports.Definition, e
 	}
 	return out, rows.Err()
 }
-func (a *App) getFilter(w http.ResponseWriter, r *http.Request, global bool) (Filter, bool) {
-	f, e := filters(r, global)
+func canFilterDrafts(r *http.Request) bool {
+	return user(r).Can("review_report") && r.URL.Query().Get("include_drafts") == "1"
+}
+
+func (a *App) getFilter(w http.ResponseWriter, r *http.Request, global, allowUnreadBasis bool) (Filter, bool) {
+	f, e := filters(r, global, allowUnreadBasis)
 	if e != nil {
 		a.err(w, r, 400, "FILTER", e.Error())
 		return f, false
@@ -179,7 +185,7 @@ func (a *App) listReports(w http.ResponseWriter, r *http.Request) {
 	if !a.permission(w, r, "read_brand_report") {
 		return
 	}
-	f, ok := a.getFilter(w, r, false)
+	f, ok := a.getFilter(w, r, false, canFilterDrafts(r))
 	if !ok {
 		return
 	}
@@ -247,7 +253,7 @@ func (a *App) summary(w http.ResponseWriter, r *http.Request) {
 	if !a.permission(w, r, "read_brand_report") {
 		return
 	}
-	f, ok := a.getFilter(w, r, false)
+	f, ok := a.getFilter(w, r, false, false)
 	if !ok {
 		return
 	}

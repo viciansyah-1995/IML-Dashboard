@@ -22,6 +22,7 @@ export function FilterBar({global=false}:{global?:boolean}){
  const items=options.data?.items||[],m=masters.data;
  const configuredBasis=draft.channel==='tiktok'?['Pesanan Teratribusi']:['Pesanan Dibuat','Pesanan Selesai'];
  const bases=relevantChoices(items.map(x=>x.basis),configuredBasis,draft.basis);
+ if(bases.length===1&&bases[0]==='Belum terbaca')bases.push(...configuredBasis);
  const scopes=relevantChoices(items.map(x=>x.scope).filter(x=>x==='host_slot'||x==='room'),['host_slot','room'],draft.scope);
  const selected=items.filter(x=>x.scope===draft.scope&&x.basis===draft.basis);
  const definitions=relevantChoices(selected.map(x=>x.definition_version),m?.mappings.filter(x=>x.channel_id===draft.channel).map(x=>x.id)||[],draft.definition_version);
