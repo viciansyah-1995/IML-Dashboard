@@ -1,0 +1,54 @@
+import {render,screen,fireEvent,waitFor,within} from '@testing-library/react';
+import {beforeEach,it,expect,vi} from 'vitest';
+import {MemoryRouter,Routes,Route} from 'react-router-dom';
+import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
+import type {Detail} from '../lib/api/client';
+import {ReportDetail} from '../features/sessions';
+const state=vi.hoisted(()=>({detail:{} as Detail,post:vi.fn()}));
+vi.mock('../app/Shell',()=>({useWorkspace:()=>({user:{id:'reviewer',role:'superadmin',permissions:['review_report','publish_report'],access_version:1}}),PageHeader:({title}:{title:string})=><h1>{title}</h1>}));
+vi.mock('../lib/query/client',()=>({key:(_u:unknown,_s:unknown,_f:unknown,id:unknown)=>['detail',id],invalidateReports:vi.fn(async()=>{})}));
+vi.mock('../lib/api/client',async original=>({...await original<object>(),api:vi.fn(async()=>structuredClone(state.detail)),post:state.post}));
+beforeEach(()=>{
+ const definitions=Array.from({length:10},(_,i)=>({key:i===9?'source_duration_seconds':'metric_'+i,label:i===9?'Durasi LIVE':'Metrik '+i,unit:'count',required:false,canonical_confirmed:false}));
+ const values=definitions.map(d=>({key:d.key,value:'10',raw_label:d.label,raw_value:'10',unit:'count',evidence_text:'Bukti 10',attachment_id:'image',page_number:1,rounded_display:false,definition_status:'source',validation_flags:[]}));
+ state.detail={metadata_editable:true,report:{id:'report',reason:'Catatan tersimpan sebelumnya',status:'review',revision:2,host:'Linda',id_line:'261112-00002',date:'2026-11-12',channel:'shopee',basis:'Pesanan Dibuat',scope:'room',start_at:'2026-11-12T08:15:00Z',end_at:'2026-11-12T10:15:00Z',period_start:'2026-11-12T08:15:00Z',period_end:'2026-11-12T10:15:00Z',period_confirmed:true,duration_seconds:7200,values},definitions,attachments:[{id:'image',name:'Bukti',bytes:1000,content_type:'image/jpeg'}],history:[],blockers:['SOURCE_DURATION_MISMATCH']} as unknown as Detail;
+ state.post.mockReset();
+ state.post.mockImplementation(async(_path,input)=>{state.detail.report={...state.detail.report,...input,revision:3};return {id:'report'}});
+});
+function mount(){return render(<MemoryRouter initialEntries={['/sessions/report']}><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><Routes><Route path="/sessions/:id" element={<ReportDetail/>}/></Routes></QueryClientProvider></MemoryRouter>)}
+it('opens the correct metric page from the alert and preserves reviewer changes across pages',async()=>{
+ mount();
+ fireEvent.click(await screen.findByRole('button',{name:'Periksa durasi LIVE'}));
+ const input=await screen.findByLabelText('Nilai dari bukti',{selector:'#review-value-source_duration_seconds'});
+ await waitFor(()=>expect(input).toHaveFocus());
+ expect(input.closest('details')).toHaveAttribute('open');
+ fireEvent.change(input,{target:{value:'10816'}});
+ const editor=within(input.closest('details')! as HTMLElement);
+ fireEvent.change(editor.getByLabelText('Evidence text'),{target:{value:'Durasi tertulis 03:00:16'}});
+ fireEvent.change(editor.getByLabelText('Halaman'),{target:{value:'2'}});
+ fireEvent.click(editor.getByLabelText('Nilai tampilan dibulatkan'));
+ const pager=screen.getByRole('navigation',{name:'Pagination metrik'});
+ fireEvent.click(within(pager).getByRole('button',{name:'Sebelumnya'}));
+ fireEvent.click(within(pager).getByRole('button',{name:'Berikutnya'}));
+ expect(screen.getByLabelText('Nilai dari bukti',{selector:'#review-value-source_duration_seconds'})).toHaveValue('10816');
+ fireEvent.change(screen.getByLabelText('Alasan / catatan review'),{target:{value:'  Durasi diperiksa  '}});
+ fireEvent.click(screen.getByRole('button',{name:'Simpan review'}));
+ await screen.findByRole('button',{name:'Buka koreksi reviewer'});
+ expect(state.post).toHaveBeenCalledWith('reports/report/review',expect.objectContaining({reason:'Durasi diperiksa',values:expect.arrayContaining([expect.objectContaining({key:'source_duration_seconds',value:'10816',evidence_text:'Durasi tertulis 03:00:16',page_number:2,rounded_display:true})])}));
+ fireEvent.click(screen.getByRole('button',{name:'Buka koreksi reviewer'}));
+ expect(screen.getByLabelText('Alasan / catatan review')).toHaveValue('Durasi diperiksa');
+});
+it('directs period alerts to the source fields and retains edits on a failed save',async()=>{
+ state.post.mockRejectedValueOnce(new Error('Gagal menyimpan'));
+ mount();
+ fireEvent.click(await screen.findByRole('button',{name:'Periksa periode sumber'}));
+ const start=await screen.findByLabelText('Mulai sumber review (GMT+7)');
+ await waitFor(()=>expect(start).toHaveFocus());
+ fireEvent.change(start,{target:{value:'2026-11-12T14:15:00'}});
+ fireEvent.change(screen.getByLabelText('Alasan / catatan review'),{target:{value:'Catatan belum tersimpan'}});
+ fireEvent.click(screen.getByRole('button',{name:'Simpan review'}));
+ await screen.findByText('Gagal menyimpan');
+ expect(screen.getByLabelText('Alasan / catatan review')).toHaveValue('Catatan belum tersimpan');
+ expect(start).toHaveValue('2026-11-12T14:15');
+ expect(state.post).toHaveBeenCalledWith('reports/report/review',expect.objectContaining({period:expect.objectContaining({start:'2026-11-12T14:15:00+07:00'})}));
+});

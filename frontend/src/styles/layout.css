@@ -282,3 +282,9 @@ th,td {padding:var(--space-4) var(--space-5)}
 .review-metric[open]>summary {margin-bottom:var(--space-4)}
 .review-fields .table-wrap {max-height:560px;overflow:auto}
 .review-fields thead th {position:sticky;top:0;background:var(--color-surface);z-index:1}
+
+.review-editable {border:0;padding:0;margin:0;min-width:0}
+.blocker-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.alert-field-link {font-size:12px;min-height:36px;padding:6px 10px}
+.saved-review-note {white-space:pre-wrap;overflow-wrap:anywhere}
+.detail-context .alert li+li {margin-top:12px}

@@ -8,6 +8,7 @@ import (
 	"iml/internal/auth"
 	"iml/internal/reports"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -90,6 +91,7 @@ func (a *App) reportAction(w http.ResponseWriter, r *http.Request, parts []strin
 		a.err(w, r, 400, "INPUT", "Input review tidak valid")
 		return
 	}
+	input.Reason = strings.TrimSpace(input.Reason)
 	if input.Reason == "" {
 		a.err(w, r, 400, "REASON", "Alasan/konfirmasi review wajib diisi")
 		return

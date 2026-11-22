@@ -1017,6 +1017,8 @@ func TestPostgresWorkflow(t *testing.T) {
 		}
 		p.Exec(ctx, "UPDATE report_versions SET definition_version='tiktok-screenshot-v1' WHERE id=$1", id)
 		input := reviewValues(t, super, id, "10150228")
+		input.Reason = "  Durasi diperiksa terhadap bukti  "
+
 		end := rec.End.Add(16 * time.Second)
 		input.Period = &ReviewPeriod{Start: &rec.Start, End: &end, Confirmed: true}
 		attachment := input.Values[0].AttachmentID
@@ -1035,6 +1037,9 @@ func TestPostgresWorkflow(t *testing.T) {
 		}
 		if code != 200 || json.Unmarshal(b, &out) != nil || len(out.Screenshot.Metrics) == 0 {
 			t.Fatal(code, string(b))
+		}
+		if out.Report.Reason != "Durasi diperiksa terhadap bukti" {
+			t.Fatal("review note was not persisted", out.Report.Reason)
 		}
 		if out.Report.PeriodEnd == nil || !out.Report.PeriodEnd.Equal(end) || !strings.Contains(strings.Join(out.Blockers, ","), "SCOPE_MISMATCH") {
 			t.Fatal("source period must not change host attribution", out)
