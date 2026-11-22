@@ -27,7 +27,7 @@ beforeEach(()=>{
 describe('screenshot-first wizard',()=>{
  it('uses WIB and handles midnight rollover',()=>{expect(slotDefaults(new Date('2026-10-18T16:45:59Z'))).toEqual({start:'2026-10-18T23:45',end:'2026-10-19T01:45'})});
  it('starts with screenshots rather than operator metadata and rejects PDFs',async()=>{
-  setup();expect(screen.getByLabelText('Screenshot laporan')).toBeInTheDocument();expect(screen.queryByLabelText('Host')).not.toBeInTheDocument();expect(screen.queryByLabelText('Mulai slot (WIB)')).not.toBeInTheDocument();
+  setup();expect(screen.getByLabelText('Screenshot laporan')).toBeInTheDocument();expect(screen.queryByLabelText('Host')).not.toBeInTheDocument();expect(screen.queryByLabelText('Mulai slot (GMT+7)')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Baca screenshot'}));await screen.findByText('Pilih minimal satu screenshot.');
   expect(post).not.toHaveBeenCalled();expect(validateFiles([new File(['pdf'],'report.pdf',{type:'application/pdf'})])).toContain('PNG/JPEG');
  });
@@ -36,8 +36,8 @@ describe('screenshot-first wizard',()=>{
   expect(screen.queryAllByRole('textbox')).toHaveLength(0);expect(screen.getByText('Terbaca')).toBeVisible();expect(screen.queryByLabelText('Host')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Hasil sudah diperiksa, lanjutkan'}));
   await screen.findByRole('heading',{name:'3. Lengkapi metadata'});
-  fireEvent.change(screen.getByLabelText('Mulai slot (WIB)'),{target:{value:'2026-10-18T09:00'}});
-  fireEvent.change(screen.getByLabelText('Akhir slot (WIB)'),{target:{value:'2026-10-18T12:00'}});
+  fireEvent.change(screen.getByLabelText('Mulai slot (GMT+7)'),{target:{value:'2026-10-18T09:00'}});
+  fireEvent.change(screen.getByLabelText('Akhir slot (GMT+7)'),{target:{value:'2026-10-18T12:00'}});
   fireEvent.submit(screen.getByRole('button',{name:'Periksa ringkasan'}).closest('form')!);
   await screen.findByRole('heading',{name:'4. Ringkasan pengajuan'});
   expect(screen.queryAllByRole('textbox')).toHaveLength(0);

@@ -272,3 +272,13 @@ th,td {padding:var(--space-4) var(--space-5)}
 @media(max-width:1000px){.wizard-columns{grid-template-columns:minmax(0,1fr)}.wizard-evidence{position:static}.wizard-evidence img{max-height:260px}}
 @media(max-width:600px){.upload-steps{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.upload-steps li{font-size:11px;padding:10px 4px;gap:6px}.wizard-card,.wizard-evidence{padding:16px}.wizard-status>button{margin-left:0}}
 .wizard-card h2[tabindex="-1"]:focus{outline:none}
+
+/* Compact report review with independently expandable metric controls. */
+.report-calculations {margin-bottom:var(--layout-section-gap)}
+.report-calculations>summary {padding:var(--space-4);cursor:pointer;font-weight:600}
+.review-metric>summary {cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2);align-items:center;margin:0}
+.review-metric>summary small {grid-column:1;grid-row:2}
+.review-metric>summary>span:last-child {grid-column:2;grid-row:1 / span 2}
+.review-metric[open]>summary {margin-bottom:var(--space-4)}
+.review-fields .table-wrap {max-height:560px;overflow:auto}
+.review-fields thead th {position:sticky;top:0;background:var(--color-surface);z-index:1}
