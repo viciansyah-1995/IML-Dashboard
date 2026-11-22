@@ -310,7 +310,7 @@ func (a *App) validateEvidenceValues(ctx context.Context, tx pgx.Tx, source stri
 		if v.Page != nil && *v.Page < 1 {
 			return nil, fmt.Errorf("nomor halaman wajib positif")
 		}
-		if v.Unit != "" && v.Unit != "source" && v.Unit != d.Unit {
+		if v.Unit != "" && v.Unit != "source" && reports.CanonicalSourceUnit(v.Unit, d.Unit) != d.Unit {
 			return nil, fmt.Errorf("satuan tidak sesuai untuk %s", d.Key)
 		}
 		v.Unit = d.Unit

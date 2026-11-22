@@ -56,6 +56,17 @@ func TestOpenClawContract(t *testing.T) {
 		}
 		var payload map[string]any
 		json.NewDecoder(r.Body).Decode(&payload)
+		input := payload["input"].([]any)
+		content := input[0].(map[string]any)["content"].([]any)
+		prompt := content[0].(map[string]any)["text"].(string)
+		start := strings.Index(prompt, "{\"values\"")
+		end := strings.Index(prompt, ". Metric value")
+		if start < 0 || end <= start || !json.Valid([]byte(prompt[start:end])) {
+			t.Fatal("prompt must contain a valid JSON example including observation")
+		}
+		if !strings.Contains(prompt, `"observation"`) || !strings.Contains(prompt, "Allowed per-value validation_flags") {
+			t.Fatal("missing observation/flag contract")
+		}
 		if _, ok := payload["user"]; ok {
 			t.Error("cross-job persistent history")
 		}
@@ -65,5 +76,24 @@ func TestOpenClawContract(t *testing.T) {
 	out, e := (OpenClawExtractor{BaseURL: server.URL, Token: "test-token", Agent: "extract-only", Timeout: time.Second}).Extract(context.Background(), Input{Channel: "tiktok", Attachments: []Attachment{{ID: "a", Mime: "image/png", Data: []byte("test")}}})
 	if e != nil || len(out.Values) != 1 || *out.Values[0].Value != "0" {
 		t.Fatal(out, e)
+	}
+}
+
+func TestOpenClawRejectsInvalidStructuredOutput(t *testing.T) {
+	for _, tc := range []struct{ name, output, want string }{
+		{"numeric metric", `{"values":[{"key":"sales","value":488320}]}`, "harus string"},
+		{"trailing object", `{"values":[{"key":"sales","value":"488320"}]} {}`, "satu objek JSON"},
+		{"empty metrics", `{"values":[]}`, "tidak memiliki metrics"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				json.NewEncoder(w).Encode(map[string]any{"output": []any{map[string]any{"content": []any{map[string]string{"type": "output_text", "text": tc.output}}}}})
+			}))
+			defer server.Close()
+			_, err := (OpenClawExtractor{BaseURL: server.URL, Token: "test", Agent: "extract-only", Timeout: time.Second}).Extract(context.Background(), Input{})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q, got %v", tc.want, err)
+			}
+		})
 	}
 }
