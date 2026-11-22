@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {readFilters,reviewQueueQuery,publishedQuery} from '../lib/api/filters';
+import {readFilters,reviewQueueQuery,publishedQuery,readPublishedFilters,optionalPublishedQuery} from '../lib/api/filters';
 describe('review inbox',()=>{
  it('does not hide Shopee room submissions behind inherited dashboard filters',()=>{
   const f=readFilters(new URLSearchParams('p_channel=tiktok&p_scope=host_slot&p_basis=Pesanan+Teratribusi&p_brand=brand-a&p_from=2099-01-01&p_host=other-host&p_definition=other-mapping'),false);
@@ -16,3 +16,8 @@ describe('review inbox',()=>{
 });
 
 describe('published default',()=>{it('ignores inherited date/channel/host filters and excludes drafts',()=>{const q=new URLSearchParams(publishedQuery(readFilters(new URLSearchParams('p_channel=tiktok&p_scope=host_slot&p_from=2099-01-01'),false,'brand-a')));expect(q.get('published_all')).toBe('1');expect(q.get('brand_id')).toBe('brand-a');for(const k of ['date_from','channel','scope','basis','include_drafts','review_queue'])expect(q.has(k)).toBe(false)})});
+
+describe('optional published filters',()=>{
+ it('starts with no active constraints even when old default filter values are in the URL',()=>{const f=readPublishedFilters(new URLSearchParams('dashboard_view=filtered&p_channel=tiktok&p_from=2026-10-24'),'a');expect(f.channel).toBe('');expect(f.date_from).toBe('');expect(f.scope).toBe('')});
+ it('sends only explicitly applied filters',()=>{const f=readPublishedFilters(new URLSearchParams('p_applied=1&p_channel=shopee&p_scope=room'),'a');const q=new URLSearchParams(optionalPublishedQuery(f));expect(q.get('channel')).toBe('shopee');expect(q.get('scope')).toBe('room');expect(q.has('date_from')).toBe(false);expect(q.has('basis')).toBe(false)});
+});

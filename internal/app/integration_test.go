@@ -963,13 +963,22 @@ func TestPostgresWorkflow(t *testing.T) {
 		if code != 200 || json.Unmarshal(body, &list) != nil || len(list.Items) != 0 {
 			t.Fatal("published list exposed draft", code, string(body))
 		}
-		code, body = admin.req("GET", "/api/reports/overview?brand_id=demo-brand-a&channel=tiktok&date_from=2099-01-01", nil)
+		code, body = admin.req("GET", "/api/reports/overview?brand_id=demo-brand-a", nil)
 		var overview struct {
 			Groups []publishedGroup `json:"groups"`
 			Total  int              `json:"total"`
 		}
 		if code != 200 || json.Unmarshal(body, &overview) != nil || overview.Total == 0 {
 			t.Fatal("overview hid historical published records", code, string(body))
+		}
+		code, body = admin.req("GET", "/api/reports/overview?brand_id=demo-brand-a&channel=shopee", nil)
+		if code != 200 || json.Unmarshal(body, &overview) != nil {
+			t.Fatal(code, string(body))
+		}
+		for _, g := range overview.Groups {
+			if g.Channel != "shopee" {
+				t.Fatal("optional channel filter ignored", g.Channel)
+			}
 		}
 		if code, _ := admin.req("GET", "/api/reports/overview?brand_id=demo-brand-b", nil); code != 404 {
 			t.Fatal("overview bypassed brand ACL", code)

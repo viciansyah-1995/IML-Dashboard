@@ -13,3 +13,9 @@ export function selectHost(ids:string[],id:string){return ids.includes(id)?ids.f
 // The review inbox lists records, never aggregates incompatible source metrics.
 export function reviewQueueQuery(f:Filters){return new URLSearchParams({review_queue:'1',include_drafts:'1',brand_id:f.brand_id,search:f.search,page:f.page,page_size:f.page_size,sort:f.sort}).toString()}
 export function publishedQuery(f:Filters){return new URLSearchParams({published_all:'1',brand_id:f.brand_id,search:f.search,page:f.page,page_size:f.page_size,sort:f.sort}).toString()}
+
+export function readPublishedFilters(params:URLSearchParams,brand=''):Filters {
+ const f=readFilters(params,false,brand),active=params.get('p_applied')==='1';
+ return {...f,date_from:active?params.get('p_from')||'':'',date_to:active?params.get('p_to')||'':'',channel:active?params.get('p_channel')||'':'',basis:active?params.get('p_basis')||'':'',scope:active?params.get('p_scope')||'':'',definition_version:active?params.get('p_definition')||'':'',host_id:active?params.get('p_host')||'':'',studio_id:active?params.get('p_studio')||'':''};
+}
+export function optionalPublishedQuery(f:Filters){const q=new URLSearchParams(publishedQuery(f));for(const k of ['date_from','date_to','channel','basis','scope','definition_version','host_id','studio_id'] as const)if(f[k])q.set(k,f[k]);return q.toString()}

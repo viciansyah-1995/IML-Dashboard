@@ -14,7 +14,6 @@ import (
 )
 
 type Filter struct {
-	AllSources bool   `json:"-"`
 	Definition string `json:"definition_version,omitempty"`
 	From       string `json:"date_from"`
 	To         string `json:"date_to"`
@@ -81,8 +80,8 @@ const recordSelect = `SELECT v.id,s.id,h.id,h.room_id,h.id_line,h.brand_id,b.nam
 
 func (a *App) records(ctx context.Context, u auth.User, f Filter, global bool, final bool, id string) ([]reports.Record, error) {
 	acl := u.Role == "superadmin" || global
-	sql := recordSelect + `WHERE ($1 OR EXISTS(SELECT 1 FROM user_brand_access x WHERE x.user_id=$2 AND x.brand_id=h.brand_id)) AND ($3='' OR h.brand_id=$3) AND ($4='' OR v.id=$4) AND ($4<>'' OR $15 OR (h.business_date BETWEEN $5::date AND $6::date AND c.id=$7 AND s.basis=$8 AND s.currency=$9 AND s.scope=$10 AND ($11='' OR h.host_id=$11) AND ($12='' OR h.studio_id=$12))) AND (NOT $13 OR (v.active AND v.status='published')) AND ($14='' OR s.definition_version=$14) ORDER BY h.business_date DESC,h.start_at DESC,v.number DESC`
-	rows, e := a.DB.Query(ctx, sql, acl, u.ID, f.Brand, id, f.From, f.To, f.Channel, f.Basis, f.Currency, f.Scope, f.Host, f.Studio, final, f.Definition, f.AllSources && !global)
+	sql := recordSelect + `WHERE ($1 OR EXISTS(SELECT 1 FROM user_brand_access x WHERE x.user_id=$2 AND x.brand_id=h.brand_id)) AND ($3='' OR h.brand_id=$3) AND ($4='' OR v.id=$4) AND ($4<>'' OR (h.business_date BETWEEN $5::date AND $6::date AND ($7='' OR c.id=$7) AND ($8='' OR s.basis=$8) AND ($9='' OR s.currency=$9) AND ($10='' OR s.scope=$10) AND ($11='' OR h.host_id=$11) AND ($12='' OR h.studio_id=$12))) AND (NOT $13 OR (v.active AND v.status='published')) AND ($14='' OR s.definition_version=$14) ORDER BY h.business_date DESC,h.start_at DESC,v.number DESC`
+	rows, e := a.DB.Query(ctx, sql, acl, u.ID, f.Brand, id, f.From, f.To, f.Channel, f.Basis, f.Currency, f.Scope, f.Host, f.Studio, final, f.Definition)
 	if e != nil {
 		return nil, e
 	}
@@ -192,7 +191,15 @@ func (a *App) listReports(w http.ResponseWriter, r *http.Request) {
 		if !publishedAll && !a.permission(w, r, "review_report") {
 			return
 		}
-		f = Filter{AllSources: true, Brand: r.URL.Query().Get("brand_id"), From: "2000-01-01", To: "2100-01-01"}
+		f = Filter{Brand: r.URL.Query().Get("brand_id"), From: "2000-01-01", To: "2100-01-01"}
+		if publishedAll {
+			var err error
+			f, err = publishedFilter(r)
+			if err != nil {
+				a.err(w, r, 400, "FILTER", err.Error())
+				return
+			}
+		}
 		if f.Brand == "" || !a.brandAllowed(r.Context(), user(r), f.Brand) {
 			a.err(w, r, 404, "NOT_FOUND", "Laporan tidak ditemukan")
 			return
