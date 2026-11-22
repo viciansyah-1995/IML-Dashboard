@@ -958,6 +958,22 @@ func TestPostgresWorkflow(t *testing.T) {
 		if code != 200 || json.Unmarshal(body, &list) != nil || len(list.Items) != 1 || list.Items[0].ID != id {
 			t.Fatal(code, string(body))
 		}
+		publishedPath := "/api/sessions?published_all=1&brand_id=demo-brand-a&status=review&include_drafts=1&search=" + url.QueryEscape(rec.IDLine)
+		code, body = admin.req("GET", publishedPath, nil)
+		if code != 200 || json.Unmarshal(body, &list) != nil || len(list.Items) != 0 {
+			t.Fatal("published list exposed draft", code, string(body))
+		}
+		code, body = admin.req("GET", "/api/reports/overview?brand_id=demo-brand-a&channel=tiktok&date_from=2099-01-01", nil)
+		var overview struct {
+			Groups []publishedGroup `json:"groups"`
+			Total  int              `json:"total"`
+		}
+		if code != 200 || json.Unmarshal(body, &overview) != nil || overview.Total == 0 {
+			t.Fatal("overview hid historical published records", code, string(body))
+		}
+		if code, _ := admin.req("GET", "/api/reports/overview?brand_id=demo-brand-b", nil); code != 404 {
+			t.Fatal("overview bypassed brand ACL", code)
+		}
 		// Inbox must find old room/Shopee reports even with stale TikTok slot filters.
 		queuePath := "/api/sessions?review_queue=1&brand_id=demo-brand-a&channel=tiktok&scope=host_slot&date_from=2099-01-01&date_to=2099-01-01&search=" + url.QueryEscape(rec.IDLine)
 		code, body = admin.req("GET", queuePath, nil)

@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {readFilters,reviewQueueQuery} from '../lib/api/filters';
+import {readFilters,reviewQueueQuery,publishedQuery} from '../lib/api/filters';
 describe('review inbox',()=>{
  it('does not hide Shopee room submissions behind inherited dashboard filters',()=>{
   const f=readFilters(new URLSearchParams('p_channel=tiktok&p_scope=host_slot&p_basis=Pesanan+Teratribusi&p_brand=brand-a&p_from=2099-01-01&p_host=other-host&p_definition=other-mapping'),false);
@@ -14,3 +14,5 @@ describe('review inbox',()=>{
   expect(query.get('search')).toBe('261101-00001');expect(query.get('page')).toBe('2');expect(query.get('page_size')).toBe('50');
  });
 });
+
+describe('published default',()=>{it('ignores inherited date/channel/host filters and excludes drafts',()=>{const q=new URLSearchParams(publishedQuery(readFilters(new URLSearchParams('p_channel=tiktok&p_scope=host_slot&p_from=2099-01-01'),false,'brand-a')));expect(q.get('published_all')).toBe('1');expect(q.get('brand_id')).toBe('brand-a');for(const k of ['date_from','channel','scope','basis','include_drafts','review_queue'])expect(q.has(k)).toBe(false)})});

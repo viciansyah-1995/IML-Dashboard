@@ -27,6 +27,8 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		a.masters(w, r)
 	case parts[0] == "masters":
 		a.mutateMaster(w, r, parts)
+	case path == "reports/overview" && r.Method == "GET":
+		a.publishedOverview(w, r)
 	case path == "reports/summary" && r.Method == "GET":
 		a.summary(w, r)
 	case path == "reports/filter-options" && r.Method == "GET":

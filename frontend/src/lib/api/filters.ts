@@ -12,3 +12,4 @@ export function selectHost(ids:string[],id:string){return ids.includes(id)?ids.f
 
 // The review inbox lists records, never aggregates incompatible source metrics.
 export function reviewQueueQuery(f:Filters){return new URLSearchParams({review_queue:'1',include_drafts:'1',brand_id:f.brand_id,search:f.search,page:f.page,page_size:f.page_size,sort:f.sort}).toString()}
+export function publishedQuery(f:Filters){return new URLSearchParams({published_all:'1',brand_id:f.brand_id,search:f.search,page:f.page,page_size:f.page_size,sort:f.sort}).toString()}
