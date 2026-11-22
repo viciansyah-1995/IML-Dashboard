@@ -14,16 +14,17 @@ import (
 )
 
 type Filter struct {
-	Definition string `json:"definition_version,omitempty"`
-	From       string `json:"date_from"`
-	To         string `json:"date_to"`
-	Brand      string `json:"brand_id,omitempty"`
-	Channel    string `json:"channel"`
-	Basis      string `json:"basis"`
-	Currency   string `json:"currency"`
-	Host       string `json:"host_id,omitempty"`
-	Studio     string `json:"studio_id,omitempty"`
-	Scope      string `json:"scope"`
+	ReviewQueue bool   `json:"-"`
+	Definition  string `json:"definition_version,omitempty"`
+	From        string `json:"date_from"`
+	To          string `json:"date_to"`
+	Brand       string `json:"brand_id,omitempty"`
+	Channel     string `json:"channel"`
+	Basis       string `json:"basis"`
+	Currency    string `json:"currency"`
+	Host        string `json:"host_id,omitempty"`
+	Studio      string `json:"studio_id,omitempty"`
+	Scope       string `json:"scope"`
 }
 
 func filters(r *http.Request, global, allowUnreadBasis bool) (Filter, error) {
@@ -80,8 +81,8 @@ const recordSelect = `SELECT v.id,s.id,h.id,h.room_id,h.id_line,h.brand_id,b.nam
 
 func (a *App) records(ctx context.Context, u auth.User, f Filter, global bool, final bool, id string) ([]reports.Record, error) {
 	acl := u.Role == "superadmin" || global
-	sql := recordSelect + `WHERE ($1 OR EXISTS(SELECT 1 FROM user_brand_access x WHERE x.user_id=$2 AND x.brand_id=h.brand_id)) AND ($3='' OR h.brand_id=$3) AND ($4='' OR v.id=$4) AND ($4<>'' OR (h.business_date BETWEEN $5::date AND $6::date AND c.id=$7 AND s.basis=$8 AND s.currency=$9 AND s.scope=$10 AND ($11='' OR h.host_id=$11) AND ($12='' OR h.studio_id=$12))) AND (NOT $13 OR (v.active AND v.status='published')) AND ($14='' OR s.definition_version=$14) ORDER BY h.business_date DESC,h.start_at DESC,v.number DESC`
-	rows, e := a.DB.Query(ctx, sql, acl, u.ID, f.Brand, id, f.From, f.To, f.Channel, f.Basis, f.Currency, f.Scope, f.Host, f.Studio, final, f.Definition)
+	sql := recordSelect + `WHERE ($1 OR EXISTS(SELECT 1 FROM user_brand_access x WHERE x.user_id=$2 AND x.brand_id=h.brand_id)) AND ($3='' OR h.brand_id=$3) AND ($4='' OR v.id=$4) AND ($4<>'' OR $15 OR (h.business_date BETWEEN $5::date AND $6::date AND c.id=$7 AND s.basis=$8 AND s.currency=$9 AND s.scope=$10 AND ($11='' OR h.host_id=$11) AND ($12='' OR h.studio_id=$12))) AND (NOT $13 OR (v.active AND v.status='published')) AND ($14='' OR s.definition_version=$14) ORDER BY h.business_date DESC,h.start_at DESC,v.number DESC`
+	rows, e := a.DB.Query(ctx, sql, acl, u.ID, f.Brand, id, f.From, f.To, f.Channel, f.Basis, f.Currency, f.Scope, f.Host, f.Studio, final, f.Definition, f.ReviewQueue && !global)
 	if e != nil {
 		return nil, e
 	}
@@ -185,9 +186,22 @@ func (a *App) listReports(w http.ResponseWriter, r *http.Request) {
 	if !a.permission(w, r, "read_brand_report") {
 		return
 	}
-	f, ok := a.getFilter(w, r, false, canFilterDrafts(r))
-	if !ok {
-		return
+	var f Filter
+	if r.URL.Query().Get("review_queue") == "1" {
+		if !a.permission(w, r, "review_report") {
+			return
+		}
+		f = Filter{ReviewQueue: true, Brand: r.URL.Query().Get("brand_id"), From: "2000-01-01", To: "2100-01-01"}
+		if f.Brand == "" || !a.brandAllowed(r.Context(), user(r), f.Brand) {
+			a.err(w, r, 404, "NOT_FOUND", "Laporan tidak ditemukan")
+			return
+		}
+	} else {
+		var ok bool
+		f, ok = a.getFilter(w, r, false, canFilterDrafts(r))
+		if !ok {
+			return
+		}
 	}
 	final := !user(r).Can("review_report") || r.URL.Query().Get("status") == "published"
 	rs, e := a.records(r.Context(), user(r), f, false, final, "")

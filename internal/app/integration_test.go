@@ -958,10 +958,22 @@ func TestPostgresWorkflow(t *testing.T) {
 		if code != 200 || json.Unmarshal(body, &list) != nil || len(list.Items) != 1 || list.Items[0].ID != id {
 			t.Fatal(code, string(body))
 		}
+		// Inbox must find old room/Shopee reports even with stale TikTok slot filters.
+		queuePath := "/api/sessions?review_queue=1&brand_id=demo-brand-a&channel=tiktok&scope=host_slot&date_from=2099-01-01&date_to=2099-01-01&search=" + url.QueryEscape(rec.IDLine)
+		code, body = admin.req("GET", queuePath, nil)
+		if code != 200 || json.Unmarshal(body, &list) != nil || len(list.Items) != 1 || list.Items[0].ID != id {
+			t.Fatal("review inbox hid report", code, string(body))
+		}
 		if code, _ := admin.req("GET", listPath+"&status=published", nil); code != 400 {
 			t.Fatal("published session filter accepted unread basis", code)
 		}
 		clientB := login(t, server.URL, "client.b@iml.local", "integration-password-123")
+		if code, _ := clientB.req("GET", queuePath, nil); code != 403 {
+			t.Fatal("non-reviewer accessed inbox", code)
+		}
+		if code, _ := admin.req("GET", "/api/sessions?review_queue=1&brand_id=demo-brand-b", nil); code != 404 {
+			t.Fatal("inbox bypassed brand access", code)
+		}
 		if code, _ := clientB.req("GET", listPath+"&include_drafts=1", nil); code != 400 {
 			t.Fatal("client filter accepted unread basis", code)
 		}
