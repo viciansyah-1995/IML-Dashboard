@@ -3,7 +3,7 @@ import {describe,it,expect,vi,beforeEach} from 'vitest';
 import {MemoryRouter} from 'react-router-dom';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {readFilters} from '../lib/api/filters';
-import {relevantChoices,type FilterOption} from '../lib/filter-options';
+import {relevantChoices,availableFilters,type FilterOption} from '../lib/filter-options';
 import {FilterBar} from '../components/ui/FilterBar';
 const state=vi.hoisted(()=>({items:[] as FilterOption[],update:vi.fn(),reset:vi.fn(),filter:{} as ReturnType<typeof readFilters>}));
 vi.mock('../lib/api/client',()=>({api:vi.fn(async()=>({items:state.items}))}));
@@ -13,7 +13,7 @@ beforeEach(()=>{state.update.mockClear();state.filter=readFilters(new URLSearchP
 describe('relevant report filters',()=>{
  it('hides singleton filters and unused Host, preserving the effective request',async()=>{
   mount();await waitFor(()=>expect(screen.queryByText('Versi definisi',{exact:true})).not.toBeInTheDocument());
-  for(const label of ['Cakupan','Studio','Host','Basis pesanan'])expect(screen.queryByText(label,{exact:true})).not.toBeInTheDocument();
+  for(const label of ['Studio','Host'])expect(screen.queryByText(label,{exact:true})).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Terapkan'}));
   expect(state.update).toHaveBeenCalledWith(expect.objectContaining({scope:'room',basis:'Pesanan Dibuat',definition_version:'',studio_id:'',host_id:''}));
  });
@@ -22,15 +22,24 @@ describe('relevant report filters',()=>{
   mount();await screen.findByText('Cakupan',{exact:true});
   expect(screen.getByText('Versi definisi',{exact:true})).toBeVisible();expect(screen.getByText('Studio',{exact:true})).toBeVisible();expect(screen.getByText('Basis pesanan',{exact:true})).toBeVisible();
  });
- it('keeps an exit from the unread basis when it is the only review result',async()=>{
+ it('keeps the actual unread basis available for review',async()=>{
   state.filter={...state.filter,basis:'Belum terbaca'};
   state.items=[{...state.items[0],basis:'Belum terbaca'}];
   mount('/admin/reports');
   const basis=await screen.findByRole('combobox',{name:'Basis pesanan'});
-  const options=basis.parentElement!.querySelector('select')!.options;
-  await waitFor(()=>expect(Array.from(options,o=>o.value).filter(Boolean)).toEqual(['Belum terbaca','Pesanan Dibuat','Pesanan Selesai']));
+  await waitFor(()=>expect(basis).toHaveValue('Belum terbaca'));
   fireEvent.click(basis);
-  expect(screen.getByRole('option',{name:'Pesanan Dibuat'})).toBeVisible();
+  expect(screen.getByRole('option',{name:'Belum terbaca'})).toBeVisible();
+ });
+ it('removes incompatible filters when switching to whole LIVE data',()=>{
+  const f={...state.filter,scope:'host_slot',basis:'Pesanan Selesai',definition_version:'old',studio_id:'old',host_id:'old'};
+  expect(availableFilters(f,state.items)).toEqual(expect.objectContaining({scope:'room',basis:'Pesanan Dibuat',definition_version:'',studio_id:'',host_id:''}));
+ });
+ it('does not display master dropdown choices when no reports are available',async()=>{
+  state.items=[];
+  mount();
+  await screen.findByText(/Belum ada laporan yang dipublikasikan/);
+  for(const label of ['Studio','Host','Versi definisi','Cakupan','Basis pesanan'])expect(screen.queryByText(label,{exact:true})).not.toBeInTheDocument();
  });
  it('uses the channel default outside the review list',()=>{
   const params=new URLSearchParams('p_channel=shopee&p_basis=Belum+terbaca');
@@ -44,10 +53,17 @@ describe('relevant report filters',()=>{
 });
 
 describe('optional filter controls',()=>{
- it('keeps the same form visible and applies only on submit',()=>{
+ it('keeps the same form visible and applies only on submit',async()=>{
  state.filter={...state.filter,date_from:'',date_to:'',channel:'',basis:'',scope:'',host_id:'',studio_id:''};
  mount('/',true);expect(screen.getByRole('button',{name:'Terapkan'})).toBeVisible();expect(screen.getByRole('combobox',{name:'Channel'})).toBeVisible();expect(state.update).not.toHaveBeenCalled();
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Terapkan'})).toBeEnabled());
  fireEvent.click(screen.getByRole('button',{name:'Terapkan'}));expect(state.update).toHaveBeenCalledWith(expect.objectContaining({date_from:'',date_to:'',channel:'',scope:''}),true);
  fireEvent.click(screen.getByRole('button',{name:'Reset filter'}));expect(state.reset).toHaveBeenCalled();
  });
+});
+
+it('preserves all-source optional filters while clearing host for whole LIVE',()=>{
+ const all={...state.filter,date_from:'',date_to:'',channel:'',basis:'',scope:'',definition_version:'',host_id:'',studio_id:''};
+ expect(availableFilters(all,state.items,false,true)).toEqual(all);
+ expect(availableFilters({...all,scope:'room',host_id:'seli'},state.items,false,true).host_id).toBe('');
 });

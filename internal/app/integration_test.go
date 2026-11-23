@@ -194,6 +194,19 @@ func TestPostgresWorkflow(t *testing.T) {
 	cb := login(t, server.URL, "client.b@iml.local", password["client.b@iml.local"])
 	super := login(t, server.URL, "superadmin@iml.local", password["superadmin@iml.local"])
 	t.Run("filter options respect report availability and ACL", func(t *testing.T) {
+		codeAll, bodyAll := ca.req("GET", "/api/reports/filter-options?published_all=1&brand_id=demo-brand-a", nil)
+		var all struct {
+			Items []filterOption `json:"items"`
+		}
+		if codeAll != 200 || json.Unmarshal(bodyAll, &all) != nil || len(all.Items) == 0 {
+			t.Fatal(codeAll, string(bodyAll))
+		}
+		for _, row := range all.Items {
+			if row.Channel == "" {
+				t.Fatal("optional filter channel missing")
+			}
+		}
+
 		code, b := ca.req("GET", "/api/reports/filter-options?"+q+"&brand_id=demo-brand-a", nil)
 		var options struct {
 			Items []filterOption `json:"items"`
@@ -219,6 +232,54 @@ func TestPostgresWorkflow(t *testing.T) {
 			}
 		}
 	})
+	t.Run("room filters use source dates and ignore stale host filters", func(t *testing.T) {
+		var source, id, brand, channel, basis string
+		var oldStart, oldEnd time.Time
+		err := p.QueryRow(ctx, "SELECT s.id,v.id,h.brand_id,lr.channel_id,s.basis,s.period_start,s.period_end FROM source_reports s JOIN report_versions v ON v.source_report_id=s.id JOIN host_slots h ON h.id=s.slot_id JOIN live_rooms lr ON lr.id=h.room_id WHERE s.scope='room' LIMIT 1").Scan(&source, &id, &brand, &channel, &basis, &oldStart, &oldEnd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = p.Exec(ctx, "UPDATE report_versions SET active=true,status='published' WHERE id=$1", id); err != nil {
+			t.Fatal(err)
+		}
+		defer p.Exec(ctx, "UPDATE report_versions SET active=false,status='review' WHERE id=$1", id)
+		start := time.Date(2026, 11, 1, 18, 30, 0, 0, time.UTC)
+		end := start.Add(2 * time.Hour)
+		if _, err = p.Exec(ctx, "UPDATE source_reports SET period_start=$2,period_end=$3 WHERE id=$1", source, start, end); err != nil {
+			t.Fatal(err)
+		}
+		defer p.Exec(ctx, "UPDATE source_reports SET period_start=$2,period_end=$3 WHERE id=$1", source, oldStart, oldEnd)
+		query := url.Values{"brand_id": {brand}, "channel": {channel}, "basis": {basis}, "scope": {"room"}, "date_from": {"2026-11-02"}, "date_to": {"2026-11-02"}, "host_id": {"stale-host"}}
+		code, body := super.req("GET", "/api/sessions?"+query.Encode()+"&status=published", nil)
+		var list struct {
+			Items []reports.Record `json:"items"`
+		}
+		if code != 200 || json.Unmarshal(body, &list) != nil || len(list.Items) != 1 || list.Items[0].ID != id || list.Items[0].Date != "2026-11-02" {
+			t.Fatal(code, string(body))
+		}
+		code, body = super.req("GET", "/api/reports/filter-options?"+query.Encode(), nil)
+		var opts struct {
+			Items []filterOption `json:"items"`
+		}
+		if code != 200 || json.Unmarshal(body, &opts) != nil || len(opts.Items) == 0 {
+			t.Fatal(code, string(body))
+		}
+
+		code, body = super.req("GET", "/api/reports/summary?"+query.Encode(), nil)
+		var summary struct {
+			Summary reports.Summary `json:"summary"`
+		}
+		if code != 200 || json.Unmarshal(body, &summary) != nil || summary.Summary.RoomCount != 1 || summary.Summary.Slots != 0 || len(summary.Summary.Trend) != 1 || summary.Summary.Trend[0].Date != "2026-11-02" {
+			t.Fatal(code, string(body))
+		}
+		query.Set("date_from", "2026-11-01")
+		query.Set("date_to", "2026-11-01")
+		code, body = super.req("GET", "/api/sessions?"+query.Encode()+"&status=published", nil)
+		if code != 200 || json.Unmarshal(body, &list) != nil || len(list.Items) != 0 {
+			t.Fatal(code, string(body))
+		}
+	})
+
 	t.Run("private ACL and global allowlist", func(t *testing.T) {
 		if code, _ := ca.req("GET", "/api/reports/demo-version-1", nil); code != 404 {
 			t.Fatal("brand B report exposed", code)

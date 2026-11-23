@@ -73,14 +73,19 @@ func filters(r *http.Request, global, allowUnreadBasis bool) (Filter, error) {
 	if f.Scope != "room" && f.Scope != "host_slot" {
 		return f, fmt.Errorf("cakupan tidak valid")
 	}
+	if f.Scope == "room" {
+		f.Host = ""
+	}
 	return f, nil
 }
 
-const recordSelect = `SELECT v.id,s.id,h.id,h.room_id,h.id_line,h.brand_id,b.name,ac.name,c.id,st.name,ho.id,ho.name,h.business_date::text,h.start_at,h.end_at,s.period_start,s.period_end,s.captured_at,s.scope,s.basis,s.currency,s.definition_version,s.period_confirmed,v.revision,v.number,v.status,v.active,s.is_demo,h.duration_seconds,v.completeness_status,v.validity_status,v.compatibility_status,v.reason,v.published_at,h.no_skp,h.pic_h1,creator.name,h.notes FROM report_versions v JOIN source_reports s ON s.id=v.source_report_id JOIN host_slots h ON h.id=s.slot_id JOIN live_rooms lr ON lr.id=h.room_id JOIN brands b ON b.id=h.brand_id JOIN brand_channel_accounts ac ON ac.id=lr.account_id JOIN channels c ON c.id=lr.channel_id JOIN studios st ON st.id=h.studio_id JOIN hosts ho ON ho.id=h.host_id JOIN users creator ON creator.id=s.created_by `
+const reportDate = "CASE WHEN s.scope='room' AND s.period_start IS NOT NULL THEN (s.period_start AT TIME ZONE 'Asia/Jakarta')::date ELSE h.business_date END"
+
+const recordSelect = `SELECT v.id,s.id,h.id,h.room_id,h.id_line,h.brand_id,b.name,ac.name,c.id,st.name,ho.id,ho.name,` + reportDate + `::text,h.start_at,h.end_at,s.period_start,s.period_end,s.captured_at,s.scope,s.basis,s.currency,s.definition_version,s.period_confirmed,v.revision,v.number,v.status,v.active,s.is_demo,h.duration_seconds,v.completeness_status,v.validity_status,v.compatibility_status,v.reason,v.published_at,h.no_skp,h.pic_h1,creator.name,h.notes FROM report_versions v JOIN source_reports s ON s.id=v.source_report_id JOIN host_slots h ON h.id=s.slot_id JOIN live_rooms lr ON lr.id=h.room_id JOIN brands b ON b.id=h.brand_id JOIN brand_channel_accounts ac ON ac.id=lr.account_id JOIN channels c ON c.id=lr.channel_id JOIN studios st ON st.id=h.studio_id JOIN hosts ho ON ho.id=h.host_id JOIN users creator ON creator.id=s.created_by `
 
 func (a *App) records(ctx context.Context, u auth.User, f Filter, global bool, final bool, id string) ([]reports.Record, error) {
 	acl := u.Role == "superadmin" || global
-	sql := recordSelect + `WHERE ($1 OR EXISTS(SELECT 1 FROM user_brand_access x WHERE x.user_id=$2 AND x.brand_id=h.brand_id)) AND ($3='' OR h.brand_id=$3) AND ($4='' OR v.id=$4) AND ($4<>'' OR (h.business_date BETWEEN $5::date AND $6::date AND ($7='' OR c.id=$7) AND ($8='' OR s.basis=$8) AND ($9='' OR s.currency=$9) AND ($10='' OR s.scope=$10) AND ($11='' OR h.host_id=$11) AND ($12='' OR h.studio_id=$12))) AND (NOT $13 OR (v.active AND v.status='published')) AND ($14='' OR s.definition_version=$14) ORDER BY h.business_date DESC,h.start_at DESC,v.number DESC`
+	sql := recordSelect + `WHERE ($1 OR EXISTS(SELECT 1 FROM user_brand_access x WHERE x.user_id=$2 AND x.brand_id=h.brand_id)) AND ($3='' OR h.brand_id=$3) AND ($4='' OR v.id=$4) AND ($4<>'' OR (` + reportDate + ` BETWEEN $5::date AND $6::date AND ($7='' OR c.id=$7) AND ($8='' OR s.basis=$8) AND ($9='' OR s.currency=$9) AND ($10='' OR s.scope=$10) AND (s.scope='room' OR $11='' OR h.host_id=$11) AND ($12='' OR h.studio_id=$12))) AND (NOT $13 OR (v.active AND v.status='published')) AND ($14='' OR s.definition_version=$14) ORDER BY h.business_date DESC,h.start_at DESC,v.number DESC`
 	rows, e := a.DB.Query(ctx, sql, acl, u.ID, f.Brand, id, f.From, f.To, f.Channel, f.Basis, f.Currency, f.Scope, f.Host, f.Studio, final, f.Definition)
 	if e != nil {
 		return nil, e
@@ -232,9 +237,20 @@ func (a *App) listReports(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.SliceStable(selected, func(i, j int) bool {
 		x, y := selected[i], selected[j]
+		xStart, yStart := x.Start, y.Start
+		xDuration, yDuration := x.Duration, y.Duration
+		if x.Scope == "room" && x.PeriodStart != nil && x.PeriodEnd != nil {
+			xStart = *x.PeriodStart
+			xDuration = int(x.PeriodEnd.Sub(*x.PeriodStart).Seconds())
+		}
+		if y.Scope == "room" && y.PeriodStart != nil && y.PeriodEnd != nil {
+			yStart = *y.PeriodStart
+			yDuration = int(y.PeriodEnd.Sub(*y.PeriodStart).Seconds())
+		}
+
 		switch ordering {
 		case "date_asc":
-			return x.Start.Before(y.Start)
+			return xStart.Before(yStart)
 		case "views_desc", "sales_desc":
 			k := strings.TrimSuffix(ordering, "_desc")
 			a, b := x.Metrics[k], y.Metrics[k]
@@ -248,9 +264,9 @@ func (a *App) listReports(w http.ResponseWriter, r *http.Request) {
 			db, _ := decimal.NewFromString(*b)
 			return da.GreaterThan(db)
 		case "duration_desc":
-			return x.Duration > y.Duration
+			return xDuration > yDuration
 		default:
-			return x.Start.After(y.Start)
+			return xStart.After(yStart)
 		}
 	})
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))

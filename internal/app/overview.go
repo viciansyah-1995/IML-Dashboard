@@ -102,5 +102,8 @@ func publishedFilter(r *http.Request) (Filter, error) {
 	if f.Scope != "" && f.Scope != "room" && f.Scope != "host_slot" && f.Scope != "snapshot" {
 		return f, fmt.Errorf("cakupan tidak valid")
 	}
+	if f.Scope == "room" {
+		f.Host = ""
+	}
 	return f, nil
 }
